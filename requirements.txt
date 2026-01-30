@@ -1,1 +1,9 @@
-# ajouter les dépendances ici (ex: numpy, pandas, scikit-learn)
+# Dépendances pour l'algorithme de désagrégation
+# Python 3.8+
+
+numpy>=1.21.0
+mosek>=10.0.0
+
+# Note : MOSEK nécessite une licence
+# - Licence académique gratuite : https://www.mosek.com/products/academic-licenses/
+# - Licence d'essai : https://www.mosek.com/products/trial/
