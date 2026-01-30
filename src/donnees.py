@@ -143,5 +143,5 @@ def valider_donnees(donnees):
     if np.any(np.isnan(donnees['p_total_i_d'])):
         raise ValueError("Valeurs NaN détectées dans p_total_i_d")
     
-    print("  ✓ Validation réussie")
+    print("   Validation réussie")
     return True
