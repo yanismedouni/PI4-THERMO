@@ -1,9 +1,7 @@
-# Dépendances pour l'algorithme de désagrégation
-# Python 3.8+
+# Dépendances pour l'algorithme d'estimation des paramètres
+# Python 3.10+
 
-numpy>=1.21.0
-mosek>=10.0.0
-
-# Note : MOSEK nécessite une licence
-# - Licence académique gratuite : https://www.mosek.com/products/academic-licenses/
-# - Licence d'essai : https://www.mosek.com/products/trial/
+numpy>=1.23
+pandas>=2.0
+matplotlib>=3.7
+meteostat>=1.6
