@@ -1,7 +1,7 @@
 # ============================================================
 # PHASE 1 (désagrégée) — Features p=7 + DBSCAN outliers
 # + 3 semaines (Austin, 2018) + 100% clients + DBSCAN par semaine
-# (sans exports, plots seulement)
+# (sans exports, plots seulement) desagrégée
 # ============================================================
 
 from __future__ import annotations
