@@ -50,8 +50,12 @@ def process_energy_data(input_file, output_file, ev_threshold_kw=3.0):
     df = add_solar_to_grid(df)
     df = remove_ev_consumption_above_threshold(df, threshold_kw=ev_threshold_kw)
 
+     # SAVE ORIGINAL GRID BEFORE MODIFICATIONS
+    df['grid_original'] = df['grid'].copy()
+    
+
     # Keep only relevant columns
-    output_columns = ['dataid', 'local_15min', 'solar', 'car', 'grid']
+    output_columns = ['dataid', 'local_15min', 'solar', 'car', 'grid_original', 'grid']
     df_output = df[output_columns].copy()
 
     # Save output
