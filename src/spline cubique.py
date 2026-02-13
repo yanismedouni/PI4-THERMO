@@ -41,11 +41,11 @@ df = df[df["dataid"] == dataid]
 # =============================
 # 4) Filtrage sur 3 mois
 # =============================
-date_debut = "2018-05-01"
-date_fin   = "2018-07-31"
+# date_debut = "2018-05-01"
+# date_fin   = "2018-07-31"
 
-mask = (df["local_15min"] >= date_debut) & (df["local_15min"] <= date_fin)
-df = df.loc[mask]
+# mask = (df["local_15min"] >= date_debut) & (df["local_15min"] <= date_fin)
+# df = df.loc[mask]
 
 # =============================
 # 5) Sélection puissance réseau
@@ -113,7 +113,19 @@ df["grid_interp"] = y_interp
 # 10) Agrégation horaire
 # =============================
 df = df.set_index("local_15min")
-power_hourly = df["grid_interp"].resample("1h").mean()
+power_hourly = df["grid_interp"]
+
+df_export = (
+    df
+    .reset_index()[["local_15min", "grid_interp"]]
+)
+
+df_export.to_csv(
+    "grid_15min_interpole.csv",
+    index=False,
+    float_format="%.6f"
+)
+
 
 # =============================
 # 11) Tracé
