@@ -38,7 +38,7 @@ SITE_CONFIG = {
             "Desktop", "Genie Elec", "Session H2026", "ELE8080", "Dev",
             "15minute_data_newyork", "15minute_data_newyork.csv"
         ),
-        "usecols": ["dataid", "local_15min", "air1", "furnace1", "furnace2"],
+        "usecols": ["dataid", "local_15min", "air1", "furnace1", "furnace2", "heater1", "heater2"],
         "id_to_region": {
             27: "Brooktondale",
             558: "Ithaca",
@@ -59,8 +59,8 @@ SITE_CONFIG = {
         "equipment": {
             "heat": dict(
                 name="Chauffage",
-                energy_col="furnace_total",
-                seuil_on=0.1,
+                energy_col="heating_total",
+                seuil_on=1,
                 months=(5, 10),
                 bin_start=-10,
                 bin_stop=30,
@@ -70,7 +70,7 @@ SITE_CONFIG = {
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=0.1,
+                seuil_on=0.5,
                 months=(6, 7, 8, 9),
                 bin_start=15,
                 bin_stop=45,
@@ -85,7 +85,7 @@ SITE_CONFIG = {
             "Desktop", "Genie Elec", "Session A2025", "ELE8080", "Dev",
             "15minute_data_austin", "15minute_data_austin.csv"
         ),
-        "usecols": ["dataid", "local_15min", "air1"],
+        "usecols": ["dataid", "local_15min", "air1","furnace1", "furnace2", "heater1", "heater2"],
         "id_to_region": {
             661: "Austin",
             1642: "Austin",
@@ -104,10 +104,20 @@ SITE_CONFIG = {
             "Austin": RegionSpec("Austin", ms.Point(30.2672, -97.7431, 150), "America/Chicago"),
         },
         "equipment": {
+            "heat": dict(
+                name="Chauffage",
+                energy_col="heating_total",
+                seuil_on=1,
+                months=(1, 2, 3, 4, 5, 10, 11, 12),
+                bin_start=-10,
+                bin_stop=30,
+                bin_step=1,
+                use_ge=True,
+            ),            
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=0.1,
+                seuil_on=1,
                 months=(5, 6, 7, 8, 9, 10),
                 bin_start=15,
                 bin_stop=45,
@@ -122,7 +132,7 @@ SITE_CONFIG = {
             "Desktop", "Genie Elec", "Session H2026", "ELE8080", "Dev",
             "15minute_data_california", "15minute_data_california.csv"
         ),
-        "usecols": ["dataid", "local_15min", "air1"],
+        "usecols": ["dataid", "local_15min", "air1","furnace1", "furnace2", "heater1", "heater2"],
         "id_to_region": {
             203: "SanDiego",
             1450: "SanDiego",
@@ -140,11 +150,21 @@ SITE_CONFIG = {
             "SanDiego": RegionSpec("SanDiego", ms.Point(32.7157, -117.1611, 20), "America/Los_Angeles"),
         },
         "equipment": {
+            "heat": dict(
+                name="Chauffage",
+                energy_col="heating_total",
+                seuil_on=1,
+                months=(1, 2, 3, 4, 5, 10, 11, 12),
+                bin_start=-10,
+                bin_stop=30,
+                bin_step=1,
+                use_ge=True,
+            ),               
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=0.3,
-                months=(6, 7, 8, 9),
+                seuil_on=0.5,
+                months=(5,6, 7, 8, 9,10),
                 bin_start=15,
                 bin_stop=45,
                 bin_step=1,
@@ -161,18 +181,41 @@ def _ensure_csv_exists(path: str) -> None:
         raise FileNotFoundError(f"CSV introuvable: {p}")
 
 
-def _load_csv_robust(path: str, usecols: list[str]) -> "pd.DataFrame":
-    """
-    Charge un CSV en essayant plusieurs encodages (utile si le fichier n'est pas UTF-8).
-    """
+def _load_csv_robust(path: str, usecols: list[str]):
     import pandas as pd
 
-    for enc in ("utf-8", "cp1252", "latin-1"):
+    encodings = ("utf-8", "cp1252", "latin-1")
+    last_err = None
+
+    for enc in encodings:
         try:
-            return pd.read_csv(path, usecols=usecols, encoding=enc)
-        except UnicodeDecodeError:
+            header = pd.read_csv(
+                path,
+                encoding=enc,
+                sep=None,
+                engine="python",
+                nrows=0,
+            )
+
+            cols_presentes = list(header.columns)
+            cols_a_garder = [c for c in usecols if c in cols_presentes]
+
+            df = pd.read_csv(
+                path,
+                encoding=enc,
+                sep=None,
+                engine="python",
+                usecols=cols_a_garder if cols_a_garder else None,
+                on_bad_lines="skip",
+            )
+
+            return df
+
+        except Exception as e:
+            last_err = e
             continue
-    raise UnicodeDecodeError("utf-8", b"", 0, 1, "Impossible de décoder le CSV (utf-8/cp1252/latin-1).")
+
+    raise last_err
 
 
 def main(site: str = "newyork", equipment_keys: tuple[str, ...] = ("heat", "ac")) -> None:
@@ -191,12 +234,12 @@ def main(site: str = "newyork", equipment_keys: tuple[str, ...] = ("heat", "ac")
     df = parse_naive_datetime_col(df, "local_15min")
     df = filter_by_ids(df, "dataid", sorted(set(id_to_region.keys())))
 
-    energy_cols = [c for c in ("air1", "furnace1", "furnace2") if c in df.columns]
+    energy_cols = [c for c in ("air1", "furnace1", "furnace2", "heater1", "heater2") if c in df.columns]
     df = clip_negative_cols(df, energy_cols)
 
-    if "furnace1" in df.columns or "furnace2" in df.columns:
-        df = compute_equipment_series_sum(df, ["furnace1", "furnace2"], out_col="furnace_total", min_count=1)
-        df = clip_negative_cols(df, ["furnace_total"])
+    if "furnace1" in df.columns or "furnace2" in df.columns or "heater1" in df.columns or "heater2" in df.columns:
+        df = compute_equipment_series_sum(df, ["furnace1", "furnace2", "heater1", "heater2"], out_col="heating_total", min_count=1)
+        df = clip_negative_cols(df, ["heating_total"])
 
     df = attach_region_column(df, id_col="dataid", id_to_region=id_to_region, region_col="region", default_region=None)
 
