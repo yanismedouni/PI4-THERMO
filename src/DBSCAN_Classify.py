@@ -29,7 +29,7 @@ EPS_BOOST = 1.15 #  petit boost pour éviter trop de noise, plus grand est + per
 
 # Seuils température à tuning
 T_CHAUDE = 20.0
-T_FROIDE = 12.0
+T_FROIDE = 10.0 # à changer pour 12
 
 
 # Qualité minimale par semaine-client
