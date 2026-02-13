@@ -24,13 +24,12 @@ RANDOM_SEED = 42
 
 # TUNING PARAMS DBSCAN
 MINPTS = 3
-EPS_PERCENTILE = 85 # plus permissif que 75 pour absorber certaines données de cluster
-EPS_BOOST = 1.15 #  petit boost pour éviter trop de noise, plus grand est + permissif
+EPS_PERCENTILE = 85  # plus permissif que 75
+EPS_BOOST = 1.15     # petit boost pour éviter trop de noise, plus grand est + permissif
 
-# Seuils température à tuning
+# Seuils température à tuning (utilisés pour f3/f4 ET pour les Pearson conditionnelles f1/f2)
 T_CHAUDE = 20.0
 T_FROIDE = 12.0
-
 
 # Qualité minimale par semaine-client
 MIN_POINTS_WEEK = int(7 * 96 * 0.75)
@@ -48,8 +47,8 @@ def eps_from_kdist_percentile(Xs: np.ndarray, k: int, q: float = 60.0) -> float:
 
 def compute_features_week(df_week: pd.DataFrame) -> pd.DataFrame:
     """
-    f1: corr(P,T)
-    f2: médiane (Pmax-Pmin)/Pmax (par jour)
+    f1: corr(P,T | T >= T_CHAUDE)     (Pearson conditionnelle période chaude)
+    f2: corr(P,T | T <= T_FROIDE)     (Pearson conditionnelle période froide)
     f3: (moy(P|T>=T_CHAUDE)) / moy(P semaine)
     f4: (moy(P|T<=T_FROIDE)) / moy(P semaine)
     """
@@ -63,20 +62,31 @@ def compute_features_week(df_week: pd.DataFrame) -> pd.DataFrame:
         P = g["grid"].to_numpy(dtype=float)
         T = g["temp"].to_numpy(dtype=float)
 
-        # --- f1: corrélation Pearson
-        if np.nanstd(P) > 0 and np.nanstd(T) > 0:
-            f1 = float(np.corrcoef(P, T)[0, 1])
-            if np.isnan(f1):
+        # --- f1: corrélation Pearson conditionnelle (chaud)
+        hot = g["temp"] >= T_CHAUDE
+        if hot.sum() >= 5:  # minimum points pour une corrélation stable
+            P_hot = g.loc[hot, "grid"].to_numpy(dtype=float)
+            T_hot = g.loc[hot, "temp"].to_numpy(dtype=float)
+            if np.nanstd(P_hot) > 0 and np.nanstd(T_hot) > 0:
+                f1 = float(np.corrcoef(P_hot, T_hot)[0, 1])
+                if np.isnan(f1):
+                    f1 = 0.0
+            else:
                 f1 = 0.0
         else:
             f1 = 0.0
 
-        # --- f2: ratio pic/vallée médian (par jour)
-        day_stats = g.groupby("date")["grid"].agg(["max", "min"])
-        valid_days = day_stats["max"] > 0
-        if valid_days.any():
-            r = (day_stats.loc[valid_days, "max"] - day_stats.loc[valid_days, "min"]) / day_stats.loc[valid_days, "max"]
-            f2 = float(np.median(r.to_numpy()))
+        # --- f2: corrélation Pearson conditionnelle (froid)
+        cold = g["temp"] <= T_FROIDE
+        if cold.sum() >= 5:
+            P_cold = g.loc[cold, "grid"].to_numpy(dtype=float)
+            T_cold = g.loc[cold, "temp"].to_numpy(dtype=float)
+            if np.nanstd(P_cold) > 0 and np.nanstd(T_cold) > 0:
+                f2 = float(np.corrcoef(P_cold, T_cold)[0, 1])
+                if np.isnan(f2):
+                    f2 = 0.0
+            else:
+                f2 = 0.0
         else:
             f2 = 0.0
 
@@ -86,14 +96,12 @@ def compute_features_week(df_week: pd.DataFrame) -> pd.DataFrame:
             mu_tot = 0.0
 
         # --- f3: ratio chaud / total
-        hot = g["temp"] >= T_CHAUDE
         mu_hot = float(g.loc[hot, "grid"].mean()) if hot.any() else 0.0
         if np.isnan(mu_hot):
             mu_hot = 0.0
         f3 = (mu_hot / mu_tot) if mu_tot > 0 else 0.0
 
         # --- f4: ratio froid / total
-        cold = g["temp"] <= T_FROIDE
         mu_cold = float(g.loc[cold, "grid"].mean()) if cold.any() else 0.0
         if np.isnan(mu_cold):
             mu_cold = 0.0
@@ -233,43 +241,3 @@ for (yy, ww) in WEEKS_SELECTED:
 
         plt.tight_layout()
         plt.show()
-        # # ============================================================
-        # # FIGURE 2 — Consommation des clients (1 subplot par client)
-        # # ============================================================
-        # clients_plot = X["dataid"].tolist()
-        # wdf_sorted = wdf.sort_values("dt")
-        # label_map = dict(zip(X["dataid"], X["label"]))
-
-        # n_clients = len(clients_plot)
-        # nrows, ncols = 3, 4
-
-        # fig2, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(14, 9), sharex=False, sharey=False)
-        # axes = np.array(axes).reshape(-1)
-
-        # for idx, client_id in enumerate(clients_plot):
-        #     ax = axes[idx]
-
-        #     gci = wdf_sorted[wdf_sorted["dataid"] == client_id].copy()
-        #     gci = gci.sort_values("dt")
-
-        #     lab = label_map.get(client_id, -1)
-
-        #     if lab == -1:
-        #         ax.plot(gci["dt"], gci["grid"], color="k", linewidth=1.2, linestyle="--")
-        #         ax.set_title(f"{client_id} (outlier)", fontsize=9)
-        #     else:
-        #         j = cluster_ids.index(lab) if lab in cluster_ids else 0
-        #         ax.plot(gci["dt"], gci["grid"], color=cmap(j), linewidth=1.2)
-        #         ax.set_title(f"{client_id} (cl {lab})", fontsize=9)
-
-        #     ax.grid(True, alpha=0.25)
-        #     ax.tick_params(axis="x", labelrotation=30, labelsize=7)
-        #     ax.tick_params(axis="y", labelsize=7)
-
-        # # cacher axes inutilisés si < 12
-        # for idx in range(n_clients, nrows * ncols):
-        #     axes[idx].axis("off")
-
-        # fig2.suptitle(f"Consommation grid(t) — semaine ({yy}, {ww})", fontsize=12)
-        # plt.tight_layout()
-        # plt.show()

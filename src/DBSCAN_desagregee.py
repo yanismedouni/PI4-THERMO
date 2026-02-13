@@ -1,11 +1,10 @@
 # ============================================================
 # PHASE 1 (désagrégée) — Features p=7 + DBSCAN outliers
-# + 3 semaines (Austin, 2018) + 50% clients + DBSCAN par semaine
-# (code complet, prêt à rouler)
+# + 3 semaines (Austin, 2018) + 100% clients + DBSCAN par semaine
+# (sans exports, plots seulement)
 # ============================================================
 
 from __future__ import annotations
-import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -16,11 +15,9 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.decomposition import PCA
 
 # -------------------------
-# CHEMINS (Windows)
+# CHEMIN (Windows)
 # -------------------------
 DATA_PATH = r"C:\Users\Samia\OneDrive - polymtlus\Bureau\DataThermo\austin\15minute_data_austin_modified.csv"
-OUT_DIR   = r"C:\Users\Samia\OneDrive - polymtlus\Bureau\DataThermo\out_dbscan_phase1"
-os.makedirs(OUT_DIR, exist_ok=True)
 
 # -------------------------
 # Paramètres
@@ -97,9 +94,7 @@ def ensure_96_points(day_df: pd.DataFrame, time_col: str) -> pd.DataFrame:
     return out.reset_index()
 
 def knee_point(sorted_vals: np.ndarray) -> float:
-    """
-    Coude via distance max à la droite reliant le premier et le dernier point.
-    """
+    """Coude via distance max à la droite reliant le premier et le dernier point."""
     y = np.asarray(sorted_vals, dtype=float)
     n = y.size
     if n == 0:
@@ -142,7 +137,6 @@ if "local_15min" in df.columns:
     time_col = "local_15min"
     df[time_col] = pd.to_datetime(df[time_col], errors="coerce", utc=True)
 else:
-    # fallback format (year,month,day,hour,minute)
     needed_time = {"year","month","day","hour","minute"}
     if not needed_time.issubset(df.columns):
         raise ValueError("Aucune colonne temps utilisable: il faut local_15min OU year/month/day/hour/minute.")
@@ -154,30 +148,26 @@ df["dataid"] = pd.to_numeric(df["dataid"], errors="coerce").astype("Int64")
 df = df.dropna(subset=["dataid"]).copy()
 df["dataid"] = df["dataid"].astype(int)
 
-# --- colonnes désagrégées (air/heat) : on accepte si certaines manquent, on met 0 si absent
+# --- colonnes désagrégées (air/heat)
 air_cols  = [c for c in ["air1","air2","air3"] if c in df.columns]
 heat_cols = [c for c in ["furnace1","furnace2","heater1","heater2","heater3"] if c in df.columns]
 
 if len(air_cols) == 0 and len(heat_cols) == 0:
     raise ValueError("Aucune colonne désagrégée trouvée (air*/furnace*/heater*). Ton fichier ne contient pas la donnée désagrégée.")
 
-# --- P_total (grid+solar) : si solar absent, solar=0
+# --- P_total (grid+solar)
 if "grid" not in df.columns:
     raise ValueError("Colonne 'grid' manquante (nécessaire à P_total).")
 if "solar" not in df.columns:
     df["solar"] = 0.0
 
-# --- temp : on utilise 'temp' si déjà dans le CSV (sinon f6/f7=0)
+# --- temp
 has_temp = ("temp" in df.columns)
 if has_temp:
     df["temp"] = pd.to_numeric(df["temp"], errors="coerce")
 
 # --- numeric + négatifs -> 0
-power_candidates = []
 for c in air_cols + heat_cols + ["grid","solar"]:
-    power_candidates.append(c)
-
-for c in power_candidates:
     df[c] = pd.to_numeric(df[c], errors="coerce")
     df.loc[df[c] < 0, c] = 0
 
@@ -195,11 +185,9 @@ iso = df[time_col].dt.isocalendar()
 df["iso_year"] = iso["year"].astype(int)
 df["iso_week"] = iso["week"].astype(int)
 
-# Austin local time (America/Chicago)
 df["t_local"] = df[time_col].dt.tz_convert("America/Chicago")
 df["date_local"] = df["t_local"].dt.floor("D")
 
-# filtre : Austin + 2018 uniquement
 df_2018 = df[df["iso_year"] == 2018].copy()
 if df_2018.empty:
     raise RuntimeError("Aucune donnée en 2018 dans ce fichier.")
@@ -220,7 +208,7 @@ print("Semaines sélectionnées (2018, top clients uniques):", selected_weeks)
 df_sel = df_2018[df_2018.set_index(["iso_year","iso_week"]).index.isin(selected_weeks)].copy()
 
 # ============================================================
-# 4) Sélection 50% des clients
+# 4) Sélection des clients (FRAC_CLIENTS)
 # ============================================================
 
 all_clients = pd.Series(df_sel["dataid"].dropna().unique())
@@ -237,14 +225,6 @@ print(df_sel.groupby(["iso_year","iso_week"])["dataid"].nunique())
 # ============================================================
 
 def compute_features_for_client_week(g: pd.DataFrame) -> dict | None:
-    """
-    Construit les features sur une observation (client, semaine).
-    - f1-3 : moyennes sur blocs (sur P_total), moyenne sur jours valides
-    - f4   : médiane ratio pic/vallée (sur P_total), sur jours valides
-    - f5   : médiane nb commutations ON/OFF (sur P_hvac), sur jours valides
-    - f6   : fraction ON en chaud (sur P_hvac), sur jours valides (tous instants)
-    - f7   : fraction ON en froid (sur P_hvac), sur jours valides (tous instants)
-    """
     g = g.sort_values("t_local").copy()
 
     day_feats = []
@@ -256,29 +236,21 @@ def compute_features_for_client_week(g: pd.DataFrame) -> dict | None:
     start3, end3 = parse_hhmm(B3[0]), parse_hhmm(B3[1])
 
     for day, gd in g.groupby("date_local", sort=False):
-        # garde seulement colonnes utiles
         cols = ["t_local", "P_total", "P_hvac"]
         if has_temp:
             cols.append("temp")
         gd2 = gd[cols].copy()
 
-        # force grille 96 points 15 min
-        gd2 = ensure_96_points(gd2, "t_local")
-        gd2 = gd2.set_index("t_local")
+        gd2 = ensure_96_points(gd2, "t_local").set_index("t_local")
 
-        # interpolation contrôlée
         Ptot, bad1 = interp_if_ok(gd2["P_total"], MAX_CONSEC_NAN)
         Phvac, bad2 = interp_if_ok(gd2["P_hvac"], MAX_CONSEC_NAN)
         if bad1 or bad2:
             continue
 
-        # temp (si dispo)
         if has_temp:
             temp = pd.to_numeric(gd2["temp"], errors="coerce")
-            if temp.isna().all():
-                temp_i = temp
-            else:
-                temp_i = temp.interpolate(method="time", limit_direction="both").ffill().bfill()
+            temp_i = temp if temp.isna().all() else temp.interpolate(method="time", limit_direction="both").ffill().bfill()
         else:
             temp_i = None
 
@@ -296,11 +268,9 @@ def compute_features_for_client_week(g: pd.DataFrame) -> dict | None:
         Pmin = float(np.nanmin(Ptot))
         r = 0.0 if (not np.isfinite(Pmax) or Pmax <= 0) else (Pmax - Pmin) / Pmax
 
-        # ON/OFF HVAC
         s = (Phvac > TAU).astype(int).to_numpy()
         n_sw = int(np.sum(np.abs(s[1:] - s[:-1])))
 
-        # chaud/froid (sur s)
         if has_temp and (temp_i is not None) and (not temp_i.isna().all()):
             th = temp_i.to_numpy(dtype=float)
             hot_mask = th >= T_CHAUDE
@@ -312,7 +282,6 @@ def compute_features_for_client_week(g: pd.DataFrame) -> dict | None:
 
         day_feats.append((m1, m2, m3, r, n_sw))
 
-    # besoin d'un minimum de jours valides
     if len(day_feats) < 3:
         return None
 
@@ -346,15 +315,9 @@ feat_all = pd.DataFrame(rows)
 if feat_all.empty:
     raise RuntimeError("Aucune semaine exploitable après filtrage (jours valides insuffisants).")
 
-# export global features
-feat_all.to_csv(os.path.join(OUT_DIR, "phase1_3weeks_features_raw.csv"), index=False)
-print(f"\nFeatures (3 semaines) -> {os.path.join(OUT_DIR, 'phase1_3weeks_features_raw.csv')}")
-
 # ============================================================
-# 7) DBSCAN — un par semaine + exports + plots PCA
+# 7) DBSCAN — un par semaine + plots PCA
 # ============================================================
-
-all_outputs = []
 
 for (y, w) in selected_weeks:
     wk = feat_all[(feat_all["iso_year"] == y) & (feat_all["iso_week"] == w)].copy()
@@ -372,26 +335,19 @@ for (y, w) in selected_weeks:
     labels = DBSCAN(eps=eps, min_samples=MINPTS, metric="euclidean").fit_predict(Xs)
 
     wk["label_dbscan"] = labels
-    wk["is_outlier"] = (labels == -1).astype(int)
+    n_out = int((labels == -1).sum())
 
-    out_all = os.path.join(OUT_DIR, f"phase1_week_{y}_{w}_features_dbscan_all.csv")
-    out_clean = os.path.join(OUT_DIR, f"phase1_week_{y}_{w}_features_dbscan_clean.csv")
+    print(f"\nDBSCAN semaine ISO {(y,w)}")
+    print(f"  eps≈{eps:.3f}, outliers={n_out}/{len(labels)}")
+    print("  clusters:", sorted([l for l in set(labels) if l != -1]))
 
-    wk.to_csv(out_all, index=False)
-    wk[wk["label_dbscan"] != -1].to_csv(out_clean, index=False)
-
-    print(f"\nDBSCAN semaine {(y,w)}")
-    print(f"  eps≈{eps:.3f}, outliers={(labels==-1).sum()}/{len(labels)}")
-    print(f"  -> {out_all}")
-    print(f"  -> {out_clean}")
-
-    # plot PCA
     if DO_PLOT:
         Z = PCA(n_components=2, random_state=0).fit_transform(Xs)
-        fig, ax = plt.subplots(figsize=(8, 6))
 
+        fig, ax = plt.subplots(figsize=(8, 6))
         noise = (labels == -1)
-        ax.scatter(Z[noise, 0], Z[noise, 1], c="k", marker="x", s=90, linewidths=2, label="noise (-1)")
+        ax.scatter(Z[noise, 0], Z[noise, 1],
+                   c="k", marker="x", s=90, linewidths=2, label="noise (-1)")
 
         cluster_ids = sorted([l for l in set(labels) if l != -1])
         cmap = plt.get_cmap("tab10", max(1, len(cluster_ids)))
@@ -409,18 +365,4 @@ for (y, w) in selected_weeks:
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best", fontsize=8)
         plt.tight_layout()
-
-        fig_path = os.path.join(OUT_DIR, f"phase1_week_{y}_{w}_dbscan_pca.png")
-        plt.savefig(fig_path, dpi=200)
         plt.show()
-        print(f"  plot -> {fig_path}")
-
-    all_outputs.append(wk)
-
-if len(all_outputs) > 0:
-    feat_labeled = pd.concat(all_outputs, ignore_index=True)
-    out_global = os.path.join(OUT_DIR, "phase1_3weeks_dbscan_labeled.csv")
-    feat_labeled.to_csv(out_global, index=False)
-    print(f"\nGlobal (3 semaines) -> {out_global}")
-else:
-    print("\n⚠️ Aucun DBSCAN n'a été exécuté (pas assez de points par semaine).")
