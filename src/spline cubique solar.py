@@ -59,7 +59,7 @@ for dataid in clients:
         continue
 
     # =============================
-    # 5) Sélection grid
+    # 5) Sélection solar
     # =============================
     df_client = df_client[["local_15min", "solar"]].copy()
     df_client["solar"] = pd.to_numeric(df_client["solar"], errors="coerce")

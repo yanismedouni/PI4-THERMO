@@ -61,9 +61,9 @@ for dataid in clients:
     # =============================
     # 5) Sélection grid
     # =============================
-    df_client = df_client[["local_15min", "solar"]].copy()
-    df_client["solar"] = pd.to_numeric(df_client["solar"], errors="coerce")
-    df_client.loc[df_client["solar"] < 0, "solar"] = 0
+    df_client = df_client[["local_15min", "grid"]].copy()
+    df_client["grid"] = pd.to_numeric(df_client["grid"], errors="coerce")
+    df_client.loc[df_client["grid"] < 0, "grid"] = 0
 
     # =============================
     # 6) Mise sur grille 15 minutes
@@ -78,12 +78,12 @@ for dataid in clients:
     df_client = df_client.asfreq("15min")
     df_client = df_client.reset_index()
 
-    y_before = df_client["solar"].copy()
+    y_before = df_client["grid"].copy()
 
     # =============================
     # Interpolation spline cubique
     # =============================
-    y = df_client["solar"]
+    y = df_client["grid"]
     t = np.arange(len(y))
 
     df_client["is_nan"] = y.isna()
@@ -135,7 +135,7 @@ for dataid in clients:
 
     y_interp[y_interp < 0] = 0
 
-    df_client["solar_interp"] = y_interp
+    df_client["grid_interp"] = y_interp
 
     # =============================
     # Tracé pour ce client
@@ -153,12 +153,12 @@ for dataid in clients:
     axes[0].set_title("Avant interpolation")
     axes[0].grid(True)
 
-    axes[1].plot(df_client.index, df_client["solar_interp"], color="tab:orange")
+    axes[1].plot(df_client.index, df_client["grid_interp"], color="tab:orange")
     axes[1].set_title("Après interpolation")
     axes[1].grid(True)
 
     fig.suptitle(
-        f"Client {dataid} – Solar\n"
+        f"Client {dataid} – Grid\n"
         f"Spline cubique (trous ≤ {MAX_GAP*15} min)"
     )
 
