@@ -24,13 +24,14 @@ df = pd.read_csv(csv_path)
 # =============================
 # 2) Nettoyage du timestamp
 # =============================
-s = df["local_15min"].astype(str).str.strip()
-s = s.str.replace("T", " ", regex=False)
-s = s.str.replace(r"\.\d{1,6}", "", regex=True)
-s = s.str.replace(r"[+-]\d{2}:?\d{2}$", "", regex=True)
+# 1) Forcer tout en UTC (évite l'erreur mixed)
+dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
 
-dt = pd.to_datetime(s, errors="coerce", utc=True)
-df["local_15min"] = dt.dt.tz_localize(None)
+# 2) Convertir vers timezone fixe -06:00 (Austin standard)
+dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
+
+# 3) Supprimer le fuseau sans décaler l'heure
+df["local_15min"] = dt_local.dt.tz_localize(None)
 
 # =============================
 # 3) Sélection du ménage
