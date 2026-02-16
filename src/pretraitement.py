@@ -46,23 +46,26 @@ def process_energy_data(input_file, output_file, ev_threshold_kw=3.0):
     print(f"Loaded {len(df)} rows from {input_file}")
     print(f"Original columns: {df.columns.tolist()}")
 
+    # SAVE ORIGINAL GRID BEFORE MODIFICATIONS (FIXED!)
+    df['grid_original'] = df['grid'].values.copy()  # ← .values.copy()
+    
     # Apply transformations
     df = add_solar_to_grid(df)
     df = remove_ev_consumption_above_threshold(df, threshold_kw=ev_threshold_kw)
 
-     # SAVE ORIGINAL GRID BEFORE MODIFICATIONS
-    df['grid_original'] = df['grid'].copy()
-    
-
-    # Keep only relevant columns
+    # Keep only relevant columns (including original grid)
     output_columns = ['dataid', 'local_15min', 'solar', 'car', 'grid_original', 'grid']
     df_output = df[output_columns].copy()
 
     # Save output
-    df_output.to_csv(output_file, index=False)
+    try:
+        df_output.to_csv(output_file, index=False)
+        print(f"\n✓ Successfully saved to {output_file}")
+    except PermissionError:
+        print(f"\n✗ ERROR: Cannot write to {output_file}")
+        print("  The file may be open in Excel. Please close it and try again.")
+        return None
 
-    print("\nProcessing complete!")
-    print(f"Saved {len(df_output)} rows to {output_file}")
     print("\nFirst few rows:")
     print(df_output.head())
     print("\nSummary statistics:")
