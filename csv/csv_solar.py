@@ -12,7 +12,7 @@ MAX_GAP = 8   # 4 × 15 min = 1 heure
 # =============================
 # 1) Chargement des données
 # =============================
-csv_path = "C:/Users/yanis/Documents/PI4-THERMO/src/15minute_data_austin.csv"
+csv_path = "../data/15minute_data_austin.csv"
 df = pd.read_csv(csv_path)
 
 # =============================
@@ -95,6 +95,6 @@ for dataid in clients:
 # =============================
 # Sauvegarde finale
 # =============================
-output_csv = "C:/Users/yanis/Documents/PI4-THERMO/output/solar_interp.csv"
+output_csv = "../output/solar_interp.csv"
 df_all_clients.to_csv(output_csv, index=False)
 print(f"Fichier CSV généré : {output_csv}")

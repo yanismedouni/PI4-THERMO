@@ -1,4 +1,3 @@
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,35 +11,46 @@ MAX_GAP = 8   # 4 × 15 min = 1 heure
 # =============================
 # 1) Chargement des données
 # =============================
-csv_path = "C:/Users/yanis/Documents/PI4-THERMO/src/15minute_data_austin.csv"
+csv_path = "../data/15minute_data_austin.csv"
 df = pd.read_csv(csv_path)
+
+# =============================
+# DIAGNOSTIC : colonnes réelles du CSV
+# =============================
+print("Colonnes brutes du CSV :")
+print([repr(c) for c in df.columns.tolist()])
+
+# Nettoyage des espaces cachés dans les noms de colonnes
+df.columns = df.columns.str.strip()
+
+print("Colonnes après strip :")
+print(df.columns.tolist())
 
 # =============================
 # 2) Nettoyage du timestamp
 # =============================
-# 1) Forcer tout en UTC (évite l'erreur mixed)
 dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
-
-# 2) Convertir vers timezone fixe -06:00 (Austin standard)
 dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
-
-# 3) Supprimer le fuseau sans décaler l'heure
 df["local_15min"] = dt_local.dt.tz_localize(None)
 
 # =============================
-# 3) Sélection du ménage
-# =============================
-# =============================
-# Création d'un DataFrame pour tous les clients
+# 3) Création d'un DataFrame pour tous les clients
 # =============================
 df_all_clients = pd.DataFrame()
 clients = df["dataid"].unique()
 
 for dataid in clients:
 
-    print(f"Traitement du client {dataid}")
+    print(f"\nTraitement du client {dataid}")
 
     df_client = df[df["dataid"] == dataid].copy()
+
+    # DIAGNOSTIC : colonnes disponibles pour ce client
+    print(f"  Colonnes disponibles : {df_client.columns.tolist()}")
+    print(f"  Nb lignes : {len(df_client)}")
+    print(f"  'grid' présente : {'grid' in df_client.columns}")
+    if "grid" in df_client.columns:
+        print(f"  Nb NaN dans grid : {df_client['grid'].isna().sum()} / {len(df_client)}")
 
     # Sélection grid
     df_client = df_client[["local_15min", "grid"]].copy()
@@ -86,15 +96,12 @@ for dataid in clients:
     y_interp[y_interp < 0] = 0
     df_client["grid_interp"] = y_interp
 
-    # Ajouter la colonne dataid
     df_client["dataid"] = dataid
-
-    # Concaténer au DataFrame global
     df_all_clients = pd.concat([df_all_clients, df_client[["dataid", "local_15min", "grid_interp"]]], ignore_index=True)
 
 # =============================
 # Sauvegarde finale
 # =============================
-output_csv = "C:/Users/yanis/Documents/PI4-THERMO/src/15minute_data_austin.csv"
+output_csv = "C:/Users/yanis/Documents/PI4-THERMO/output/grid_interp.csv"
 df_all_clients.to_csv(output_csv, index=False)
-print(f"Fichier CSV généré : {output_csv}")
+print(f"\nFichier CSV généré : {output_csv}")

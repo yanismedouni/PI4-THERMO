@@ -79,8 +79,7 @@ def process_energy_data(input_file, output_file, ev_threshold_kw=3.0):
 # ==========================
 if __name__ == "__main__":
 
-    # Put your file in the SAME folder as this script
-    input_path = "15minute_data_austin.csv"   # Change to your real file name
-    output_path = "processed_energy_data.csv"
+    input_path = "../data/15minute_data_austin.csv"
+    output_path = "../output/processed_energy_data.csv"
 
     process_energy_data(input_path, output_path, ev_threshold_kw=3.0)
