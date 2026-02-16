@@ -42,16 +42,16 @@ for dataid in clients:
 
     df_client = df[df["dataid"] == dataid].copy()
 
-    # Sélection grid
-    df_client = df_client[["local_15min", "grid"]].copy()
-    df_client["grid"] = pd.to_numeric(df_client["grid"], errors="coerce")
-    df_client.loc[df_client["grid"] < 0, "grid"] = 0
+    # Sélection solar
+    df_client = df_client[["local_15min", "solar"]].copy()
+    df_client["solar"] = pd.to_numeric(df_client["solar"], errors="coerce")
+    df_client.loc[df_client["solar"] < 0, "solar"] = 0
 
     # Mise sur grille 15 minutes
     df_client = df_client.groupby("local_15min", as_index=False).mean(numeric_only=True)
     df_client = df_client.set_index("local_15min").asfreq("15min").reset_index()
 
-    y = df_client["grid"]
+    y = df_client["solar"]
     t = np.arange(len(y))
 
     df_client["is_nan"] = y.isna()
@@ -84,17 +84,17 @@ for dataid in clients:
         y_interp.loc[idx] = cs_local(t[idx])
 
     y_interp[y_interp < 0] = 0
-    df_client["grid_interp"] = y_interp
+    df_client["solar_interp"] = y_interp
 
     # Ajouter la colonne dataid
     df_client["dataid"] = dataid
 
     # Concaténer au DataFrame global
-    df_all_clients = pd.concat([df_all_clients, df_client[["dataid", "local_15min", "grid_interp"]]], ignore_index=True)
+    df_all_clients = pd.concat([df_all_clients, df_client[["dataid", "local_15min", "solar_interp"]]], ignore_index=True)
 
 # =============================
 # Sauvegarde finale
 # =============================
-output_csv = "C:/Users/Edith-Irene/Desktop/PIGE/15minute_data_austin/15minute_data_austin/cleaned_data_all_clients.csv"
+output_csv = "C:/Users/Edith-Irene/Desktop/PIGE/15minute_data_austin/15minute_data_austin/cleaned_data_all_clients_solar.csv"
 df_all_clients.to_csv(output_csv, index=False)
 print(f"Fichier CSV généré : {output_csv}")
