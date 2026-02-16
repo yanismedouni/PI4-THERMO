@@ -150,8 +150,8 @@ def process_energy_data(grid_file, solar_file, raw_file, output_file, ev_thresho
 # ==========================
 if __name__ == "__main__":
 
-    grid_path   = "../output/grid_interp.csv"
-    solar_path  = "../output/solar_interp.csv"
+    grid_path   = "../csv/output/grid_interp.csv"
+    solar_path  = "../csv/output/solar_interp.csv"
     raw_path    = "../data/15minute_data_austin.csv"   # still needed for car1/car2
     output_path = "../output/processed_energy_data.csv"
 
