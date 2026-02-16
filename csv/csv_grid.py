@@ -27,8 +27,8 @@ print([repr(c) for c in df.columns.tolist()])
 # Nettoyage des espaces cachés dans les noms de colonnes
 df.columns = df.columns.str.strip()
 
-print("Colonnes après strip :")
-print(df.columns.tolist())
+#print("Colonnes après strip :")
+#print(df.columns.tolist())
 
 # =============================
 # 2) Nettoyage du timestamp

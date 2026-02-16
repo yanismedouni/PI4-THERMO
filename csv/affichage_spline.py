@@ -18,7 +18,7 @@ MAX_GAP = 8   # 4 × 15 min = 1 heure
 # =============================
 # 1) Chargement des données
 # =============================
-csv_path = "C:/Users/Edith-Irene/Desktop/PIGE/15minute_data_austin/15minute_data_austin/15minute_data_austin.csv"
+csv_path = "../src/15minute_data_austin.csv"
 df = pd.read_csv(csv_path)
 
 # =============================
