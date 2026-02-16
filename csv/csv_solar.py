@@ -1,8 +1,8 @@
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
+import os  # ← AJOUT
 
 # =============================
 # PARAMÈTRES
@@ -18,13 +18,8 @@ df = pd.read_csv(csv_path)
 # =============================
 # 2) Nettoyage du timestamp
 # =============================
-# 1) Forcer tout en UTC (évite l'erreur mixed)
 dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
-
-# 2) Convertir vers timezone fixe -06:00 (Austin standard)
 dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
-
-# 3) Supprimer le fuseau sans décaler l'heure
 df["local_15min"] = dt_local.dt.tz_localize(None)
 
 # =============================
@@ -86,15 +81,13 @@ for dataid in clients:
     y_interp[y_interp < 0] = 0
     df_client["solar_interp"] = y_interp
 
-    # Ajouter la colonne dataid
     df_client["dataid"] = dataid
-
-    # Concaténer au DataFrame global
     df_all_clients = pd.concat([df_all_clients, df_client[["dataid", "local_15min", "solar_interp"]]], ignore_index=True)
 
 # =============================
 # Sauvegarde finale
 # =============================
-output_csv = "../output/solar_interp.csv"
-df_all_clients.to_csv(output_csv, index=False)
+output_csv = "../csv/output/solar_interp.csv"
+os.makedirs(os.path.dirname(output_csv), exist_ok=True)  # crée le dossier s'il n'existe pas
+df_all_clients.to_csv(output_csv, index=False)           # sauvegarde le CSV
 print(f"Fichier CSV généré : {output_csv}")

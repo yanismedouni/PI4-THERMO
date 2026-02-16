@@ -2,6 +2,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
+import os
+
+
+
 
 # =============================
 # PARAMÈTRES
@@ -45,12 +49,12 @@ for dataid in clients:
 
     df_client = df[df["dataid"] == dataid].copy()
 
-    # DIAGNOSTIC : colonnes disponibles pour ce client
-    print(f"  Colonnes disponibles : {df_client.columns.tolist()}")
-    print(f"  Nb lignes : {len(df_client)}")
-    print(f"  'grid' présente : {'grid' in df_client.columns}")
-    if "grid" in df_client.columns:
-        print(f"  Nb NaN dans grid : {df_client['grid'].isna().sum()} / {len(df_client)}")
+    ## DIAGNOSTIC : colonnes disponibles pour ce client
+    #print(f"  Colonnes disponibles : {df_client.columns.tolist()}")
+    #print(f"  Nb lignes : {len(df_client)}")
+    #print(f"  'grid' présente : {'grid' in df_client.columns}")
+    #if "grid" in df_client.columns:
+        #print(f"  Nb NaN dans grid : {df_client['grid'].isna().sum()} / {len(df_client)}")
 
     # Sélection grid
     df_client = df_client[["local_15min", "grid"]].copy()
@@ -102,6 +106,7 @@ for dataid in clients:
 # =============================
 # Sauvegarde finale
 # =============================
-output_csv = "C:/Users/yanis/Documents/PI4-THERMO/output/grid_interp.csv"
-df_all_clients.to_csv(output_csv, index=False)
+output_csv = "../csv/output/grid_interp.csv"
+os.makedirs(os.path.dirname(output_csv), exist_ok=True)  # crée le dossier s'il n'existe pas
+df_all_clients.to_csv(output_csv, index=False)           # sauvegarde le CSV
 print(f"\nFichier CSV généré : {output_csv}")
