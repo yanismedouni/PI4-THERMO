@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Feb  5 21:57:36 2026
-
-@author: Edith-Irene
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -37,6 +30,15 @@ df["local_15min"] = dt_local.dt.tz_localize(None)
 # 3) Sélection du ménage
 # =============================
 clients = df["dataid"].unique()
+
+figures = []
+fig, axes = plt.subplots(
+    1, 2,
+    figsize=(18, 6),
+    sharex=True,
+    sharey=True
+)
+
 
 for dataid in clients:
 
@@ -158,10 +160,12 @@ for dataid in clients:
     axes[1].set_title("Après interpolation")
     axes[1].grid(True)
 
-    fig.suptitle(
-        f"Client {dataid} – Grid\n"
-        f"Spline cubique (trous ≤ {MAX_GAP*15} min)"
-    )
+    fig.suptitle(f"Client {dataid}")
 
     plt.tight_layout()
-    plt.show()
+
+    figures.append(fig)   # on stocke la figure
+
+    
+    
+plt.show()

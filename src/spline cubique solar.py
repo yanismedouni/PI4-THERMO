@@ -38,6 +38,15 @@ df["local_15min"] = dt_local.dt.tz_localize(None)
 # =============================
 clients = df["dataid"].unique()
 
+figures = []
+fig, axes = plt.subplots(
+    1, 2,
+    figsize=(18, 6),
+    sharex=True,
+    sharey=True
+)
+
+
 for dataid in clients:
 
     print(f"Traitement du client {dataid}")
@@ -158,10 +167,10 @@ for dataid in clients:
     axes[1].set_title("Après interpolation")
     axes[1].grid(True)
 
-    fig.suptitle(
-        f"Client {dataid} – Solar\n"
-        f"Spline cubique (trous ≤ {MAX_GAP*15} min)"
-    )
+    fig.suptitle(f"Client {dataid}")
 
     plt.tight_layout()
-    plt.show()
+
+    figures.append(fig)   # on stocke la figure
+
+plt.show()
