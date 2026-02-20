@@ -3,7 +3,9 @@ import numpy as np
 import os
 
 # ------------------------------------------------------------------
-# CHEMINS — À MODIFIER UNIQUEMENT ICI
+# CHEMINS — À MODIFIER UNIQUEMENT ICI 
+# pour copier un chemi d'accès à insérer, voir image jointe au répertoire
+# le path out_path donnez lui le nom que vous souhaitez, un fichier sera créé.
 # ------------------------------------------------------------------
 in_path = r"C:\Users\Samia\OneDrive - polymtlus\Bureau\DataThermo\california\15minute_data_california.csv"
 temp_path = r"C:\Users\Samia\OneDrive - polymtlus\Bureau\DataThermo\california\meteo_californie.csv"
