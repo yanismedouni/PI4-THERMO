@@ -45,7 +45,7 @@ for dataid in clients:
     # Sélection grid
     df_client = df_client[["local_15min", "grid"]].copy()
     df_client["grid"] = pd.to_numeric(df_client["grid"], errors="coerce")
-    df_client.loc[df_client["grid"] < 0, "grid"] = 0
+    df_client.loc[ (df_client["grid"] > -0.240) & (df_client["grid"] < 0), "grid"] = 0
 
     # Mise sur grille 15 minutes
     df_client = df_client.groupby("local_15min", as_index=False).mean(numeric_only=True)
@@ -83,7 +83,7 @@ for dataid in clients:
         cs_local = CubicSpline(t_local[mask_local], y_local[mask_local], bc_type="natural")
         y_interp.loc[idx] = cs_local(t[idx])
 
-    y_interp[y_interp < 0] = 0
+    y_interp[(y_interp > -0.240) & (y_interp < 0)] = 0
     df_client["grid_interp"] = y_interp
 
     # Ajouter la colonne dataid
