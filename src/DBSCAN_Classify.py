@@ -249,28 +249,28 @@ for (yy, ww) in WEEKS_SELECTED:
         plt.tight_layout()
         plt.show()
 
-# ------------------------------------------------------------------
-# 5) EXPORT CSV FILTRÉ: on enlève du dataset tous les clients outliers
-#    (si un client est outlier dans au moins une semaine sélectionnée)
-#    -> le CSV de sortie garde les mêmes colonnes que le fichier d'origine
-# ------------------------------------------------------------------
-print("\n==============================")
-print("Filtrage final DBSCAN (union des outliers)")
-print("==============================")
-print(f"Nombre total de clients outliers retirés: {len(global_outlier_clients)}")
-print("Exemples:", sorted(list(global_outlier_clients))[:20], "..." if len(global_outlier_clients) > 20 else "")
+# # ------------------------------------------------------------------
+# # 5) EXPORT CSV FILTRÉ: on enlève du dataset tous les clients outliers
+# #    (si un client est outlier dans au moins une semaine sélectionnée)
+# #    -> le CSV de sortie garde les mêmes colonnes que le fichier d'origine
+# # ------------------------------------------------------------------
+# print("\n==============================")
+# print("Filtrage final DBSCAN (union des outliers)")
+# print("==============================")
+# print(f"Nombre total de clients outliers retirés: {len(global_outlier_clients)}")
+# print("Exemples:", sorted(list(global_outlier_clients))[:20], "..." if len(global_outlier_clients) > 20 else "")
 
-df_filtered = df.copy()
-df_filtered = df_filtered[~df_filtered["dataid"].isin(global_outlier_clients)].copy()
+# df_filtered = df.copy()
+# df_filtered = df_filtered[~df_filtered["dataid"].isin(global_outlier_clients)].copy()
 
-print(f"Lignes avant: {len(df)} | Lignes après: {len(df_filtered)}")
+# print(f"Lignes avant: {len(df)} | Lignes après: {len(df_filtered)}")
 
-# Important: garder EXACTEMENT les mêmes colonnes que le fichier initial
-# (df a déjà des colonnes ajoutées iso_year/iso_week/date/dt; on écrit seulement les colonnes originales)
-df_original = pd.read_csv(DATA_PATH, nrows=0)
-orig_cols = df_original.columns.tolist()
+# # Important: garder EXACTEMENT les mêmes colonnes que le fichier initial
+# # (df a déjà des colonnes ajoutées iso_year/iso_week/date/dt; on écrit seulement les colonnes originales)
+# df_original = pd.read_csv(DATA_PATH, nrows=0)
+# orig_cols = df_original.columns.tolist()
 
-df_out = df_filtered[orig_cols].copy()
-df_out.to_csv(OUT_PATH_FILTERED, index=False)
+# df_out = df_filtered[orig_cols].copy()
+# df_out.to_csv(OUT_PATH_FILTERED, index=False)
 
-print(f"CSV filtré écrit: {OUT_PATH_FILTERED}")
+# print(f"CSV filtré écrit: {OUT_PATH_FILTERED}")
