@@ -33,60 +33,56 @@ class RegionSpec:
     tz_target: str
 
 
+def _to_local_naive_index(
+    idx: pd.DatetimeIndex,
+    tz_source: str,
+    tz_target: str,
+) -> pd.DatetimeIndex:
+    if idx.tz is None:
+        idx = idx.tz_localize(tz_source)
+    return idx.tz_convert(tz_target).tz_localize(None)
+
+
 def build_temp_15min(
     point: ms.Point,
-    start: pd.Timestamp,
-    end: pd.Timestamp,
+    start,
+    end,
     tz_source: str = "UTC",
     tz_target: str = "America/New_York",
     out_col: str = "temp",
+    station_limit: int = 6,
 ) -> pd.DataFrame:
     """
-    Récupère la température Meteostat (horaire), aligne au fuseau local,
-    et interpole à 15 minutes.
+    Meteostat 2.x: stations.nearby -> hourly -> interpolate -> resample 15min
 
-    Paramètres
-    ----------
-    point : ms.Point
-        Coordonnées.
-    start, end : pd.Timestamp
-        Fenêtre temporelle.
-    tz_source : str
-        Fuseau présumé Meteostat.
-    tz_target : str
-        Fuseau cible.
-    out_col : str
-        Nom de colonne de sortie.
-
-    Retours
-    -------
-    pd.DataFrame
-        Index datetime naïf (15min), colonne `out_col`.
-
-    Exceptions
-    ----------
-    ValueError
-        Si aucune donnée n'est récupérée ou si la colonne température est absente.
+    Robustesse:
+    - si interpolate() échoue (elevation/redirect), on retombe sur la station la + proche (sans interpolate)
     """
-    stations = ms.stations.nearby(point, limit=4)
+    stations = ms.stations.nearby(point, limit=station_limit)
     ts_hour = ms.hourly(stations, start, end)
-    df = ms.interpolate(ts_hour, point).fetch()
-    if df.empty:
-        raise ValueError("Aucune donnée Meteostat récupérée.")
 
-    idx = df.index
-    if idx.tz is None:
-        idx = idx.tz_localize(tz_source)
-    idx = idx.tz_convert(tz_target).tz_localize(None)
-    df = df.copy()
-    df.index = idx
+    # 1) Essai interpolation (meilleure qualité)
+    try:
+        df = ms.interpolate(ts_hour, point).fetch()
+    except Exception:
+        # 2) Fallback: prendre la station la plus proche (sans interpolation)
+        df = ts_hour.fetch()
+
+    if df is None or df.empty:
+        return pd.DataFrame(columns=[out_col])
+
+    # timezone -> naïf local
+    df.index = _to_local_naive_index(df.index, tz_source=tz_source, tz_target=tz_target)
     df = df[~df.index.duplicated(keep="first")]
 
+    # colonne température
     col_in = "temp" if "temp" in df.columns else ("t" if "t" in df.columns else None)
     if col_in is None:
-        raise ValueError("Colonne température introuvable dans Meteostat.")
+        return pd.DataFrame(columns=[out_col])
 
     out = df[[col_in]].rename(columns={col_in: out_col})
+
+    # 15 min
     out = out.resample("15min").interpolate(method="time")
     return out
 

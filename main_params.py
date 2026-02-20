@@ -25,8 +25,9 @@ from probability import (
     attach_region_column,
     estimate_proba_on_by_temp_multi_region,
 )
-from plotting import plot_proba_curve
+from plotting import plot_proba_curve, plot_hourly_curve, plot_hourly_curves_by_month
 
+from hourly_usage import estimate_hourly_usage_multi_region
 
 def _home_path(*parts: str) -> str:
     return str(Path.home().joinpath(*parts))
@@ -60,7 +61,7 @@ SITE_CONFIG = {
             "heat": dict(
                 name="Chauffage",
                 energy_col="heating_total",
-                seuil_on=1,
+                seuil_on=0.5,
                 months=(5, 10),
                 bin_start=-10,
                 bin_stop=30,
@@ -70,7 +71,7 @@ SITE_CONFIG = {
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=0.5,
+                seuil_on=0.1,
                 months=(6, 7, 8, 9),
                 bin_start=15,
                 bin_stop=45,
@@ -107,7 +108,7 @@ SITE_CONFIG = {
             "heat": dict(
                 name="Chauffage",
                 energy_col="heating_total",
-                seuil_on=1,
+                seuil_on=0.5,
                 months=(1, 2, 3, 4, 5, 10, 11, 12),
                 bin_start=-10,
                 bin_stop=30,
@@ -117,7 +118,7 @@ SITE_CONFIG = {
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=1,
+                seuil_on=0.1,
                 months=(5, 6, 7, 8, 9, 10),
                 bin_start=15,
                 bin_stop=45,
@@ -153,7 +154,7 @@ SITE_CONFIG = {
             "heat": dict(
                 name="Chauffage",
                 energy_col="heating_total",
-                seuil_on=1,
+                seuil_on=0.5,
                 months=(1, 2, 3, 4, 5, 10, 11, 12),
                 bin_start=-10,
                 bin_stop=30,
@@ -163,7 +164,7 @@ SITE_CONFIG = {
             "ac": dict(
                 name="Climatisation",
                 energy_col="air1",
-                seuil_on=0.5,
+                seuil_on=0.1,
                 months=(5,6, 7, 8, 9,10),
                 bin_start=15,
                 bin_stop=45,
@@ -260,14 +261,22 @@ def main(site: str = "newyork", equipment_keys: tuple[str, ...] = ("heat", "ac")
 
         equip = EquipmentSpec(**available_equipment[k])
 
-        out = estimate_proba_on_by_temp_multi_region(
-            df=df,
-            regions=regions,
-            equipment=equip,
-            cfg=run_cfg,
-            tz_source_meteostat="UTC",
-            verbose=True,
-        )
+        try:
+            out = estimate_proba_on_by_temp_multi_region(
+                df=df, regions=regions, equipment=equip, cfg=run_cfg,
+                tz_source_meteostat="UTC", verbose=True,
+            )
+        except Exception as e:
+            print(f"[ERREUR TEMP] {equip.name} – {site}: {e}")
+            continue
+
+        try:
+            hourly = estimate_hourly_usage_multi_region(
+                df=df, regions=regions, equipment=equip, cfg=run_cfg
+            )
+        except Exception as e:
+            print(f"[ERREUR HEURE] {equip.name} – {site}: {e}")
+            hourly = None
 
         ylabel = "P(ON)"
         if "clim" in equip.name.lower():
@@ -277,6 +286,11 @@ def main(site: str = "newyork", equipment_keys: tuple[str, ...] = ("heat", "ac")
 
         plot_proba_curve(out, title=f"{equip.name} – {site}", ylabel=ylabel)
 
+        if hourly is not None:
+            ws, we = hourly.peak_week_window
+            plot_hourly_curve(hourly.season_hourly, title=f"{equip.name} – {site} (Saison)", ylabel=ylabel, show_n_as_text=True)
+            plot_hourly_curve(hourly.peak_week_hourly, title=f"{equip.name} – {site} (Semaine pic: {ws.date()} → {we.date()})", ylabel=ylabel, show_n_as_text=True)
+            plot_hourly_curves_by_month(hourly.monthly_hourly, title=f"{equip.name} – {site} (Par mois)", ylabel=ylabel, months=equip.months)
 
 if __name__ == "__main__":
     site = (sys.argv[1].strip().lower() if len(sys.argv) >= 2 else "newyork")
