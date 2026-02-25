@@ -100,19 +100,16 @@ def build_temperature_series(meteo_path: str | Path, timezone: str) -> pd.Series
 
     df = df.set_index("time").sort_index()
 
-    # ── Resample to 15-min grid, linear interpolation ─────────────────
-    # First upsample to 15-min (introduces NaNs between hours),
-    # then interpolate linearly.
+    # Reindex to 15-min grid and forward-fill each hourly value across its 4 slots
     idx_15min = pd.date_range(
         start=df.index.min(),
-        end=df.index.max(),
+        end=df.index.max() + pd.Timedelta(minutes=45),
         freq="15min",
     )
     series = (
         df["temperature_2m"]
-        .reindex(df.index.union(idx_15min))
-        .interpolate(method="time")
         .reindex(idx_15min)
+        .ffill()
     )
     series.name = "temp"
     series.index.name = "local_15min"
