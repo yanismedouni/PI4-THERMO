@@ -18,7 +18,6 @@ import pandas as pd
 # Columns to pull from the raw CSV (besides dataid / local_15min)
 # ──────────────────────────────────────────────────────────────────────
 _EXTRA_COLS = [
-    "temp",
     "air1", "air2", "air3",
     "airwindowunit1",
     "furnace1", "furnace2",
@@ -121,6 +120,10 @@ def merge_extra_columns(df: pd.DataFrame, df_extra: pd.DataFrame) -> pd.DataFram
     and enforce a clean final column order.
     """
     df_merged = pd.merge(df, df_extra, on=["dataid", "local_15min"], how="left")
+
+    # temp is filled later by open-meteo (temperature.py) — add placeholder if absent
+    if "temp" not in df_merged.columns:
+        df_merged["temp"] = float("nan")
 
     ordered = [
         "dataid", "local_15min",
