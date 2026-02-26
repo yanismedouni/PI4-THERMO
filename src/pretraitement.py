@@ -18,7 +18,6 @@ import pandas as pd
 # Columns to pull from the raw CSV (besides dataid / local_15min)
 # ──────────────────────────────────────────────────────────────────────
 _EXTRA_COLS = [
-    "temp",
     "air1", "air2", "air3",
     "airwindowunit1",
     "furnace1", "furnace2",
@@ -122,6 +121,10 @@ def merge_extra_columns(df: pd.DataFrame, df_extra: pd.DataFrame) -> pd.DataFram
     """
     df_merged = pd.merge(df, df_extra, on=["dataid", "local_15min"], how="left")
 
+    # temp is filled later by open-meteo (temperature.py) — add placeholder if absent
+    if "temp" not in df_merged.columns:
+        df_merged["temp"] = float("nan")
+
     ordered = [
         "dataid", "local_15min",
         "year", "month", "day", "hour", "minute",
@@ -155,9 +158,6 @@ def process_energy_data(grid_file, solar_file, raw_file, output_file, ev_thresho
     # ------------------------------------------------------------------
     df_grid  = pd.read_csv(grid_file,  parse_dates=["local_15min"])
     df_solar = pd.read_csv(solar_file, parse_dates=["local_15min"])
-
-    print(f"Loaded {len(df_grid)}  rows from {grid_file}")
-    print(f"Loaded {len(df_solar)} rows from {solar_file}")
 
     df_grid  = df_grid.rename(columns={"grid_interp":  "grid"})
     df_solar = df_solar.rename(columns={"solar_interp": "solar"})
@@ -204,8 +204,6 @@ def process_energy_data(grid_file, solar_file, raw_file, output_file, ev_thresho
     # ------------------------------------------------------------------
     df = pd.merge(df, df_ev, on=["dataid", "local_15min"], how="left")
 
-    print(f"\nMerged dataset: {len(df)} rows")
-
     # ------------------------------------------------------------------
     # 5. Save original grid before modifications
     # ------------------------------------------------------------------
@@ -220,27 +218,18 @@ def process_energy_data(grid_file, solar_file, raw_file, output_file, ev_thresho
     # ------------------------------------------------------------------
     # 7. Load & merge extra appliance + temperature columns
     # ------------------------------------------------------------------
-    print("\nLoading extra columns from raw CSV...")
     df_extra = load_extra_columns_from_raw(raw_file)
     df = merge_extra_columns(df, df_extra)
-
-    print(f"Final columns: {df.columns.tolist()}")
 
     # ------------------------------------------------------------------
     # 8. Save output
     # ------------------------------------------------------------------
     try:
         df.to_csv(output_file, index=False)
-        print(f"\n Successfully saved to {output_file}")
+        print(f"  ✔ Saved → {output_file}")
     except PermissionError:
-        print(f"\n ERROR: Cannot write to {output_file}")
-        print("  The file may be open in Excel. Please close it and try again.")
+        print(f"  ✗ ERROR: Cannot write to {output_file} — file may be open in Excel.")
         return None
-
-    print("\nFirst few rows:")
-    print(df.head())
-    #print("\nSummary statistics:")
-    #print(df.describe())
 
     return df
 

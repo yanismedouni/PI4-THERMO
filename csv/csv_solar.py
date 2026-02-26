@@ -33,8 +33,6 @@ clients = df["dataid"].unique()
 
 for dataid in clients:
 
-    print(f"Traitement du client {dataid}")
-
     df_client = df[df["dataid"] == dataid].copy()
 
     # Sélection solar
@@ -89,5 +87,4 @@ for dataid in clients:
 # =============================
 output_csv = "../csv/output/solar_interp.csv"
 os.makedirs(os.path.dirname(output_csv), exist_ok=True)  # crée le dossier s'il n'existe pas
-df_all_clients.to_csv(output_csv, index=False)           # sauvegarde le CSV
-print(f"Fichier CSV généré : {output_csv}")
+df_all_clients.to_csv(output_csv, index=False)
