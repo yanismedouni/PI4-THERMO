@@ -18,11 +18,7 @@ MAX_GAP = 8   # 4 × 15 min = 1 heure
 csv_path = "../data/15minute_data_austin.csv"
 df = pd.read_csv(csv_path)
 
-# =============================
-# DIAGNOSTIC : colonnes réelles du CSV
-# =============================
-print("Colonnes brutes du CSV :")
-print([repr(c) for c in df.columns.tolist()])
+
 
 # Nettoyage des espaces cachés dans les noms de colonnes
 df.columns = df.columns.str.strip()
@@ -44,8 +40,6 @@ df_all_clients = pd.DataFrame()
 clients = df["dataid"].unique()
 
 for dataid in clients:
-
-    print(f"\nTraitement du client {dataid}")
 
     df_client = df[df["dataid"] == dataid].copy()
 
@@ -108,5 +102,4 @@ for dataid in clients:
 # =============================
 output_csv = "../csv/output/grid_interp.csv"
 os.makedirs(os.path.dirname(output_csv), exist_ok=True)  # crée le dossier s'il n'existe pas
-df_all_clients.to_csv(output_csv, index=False)           # sauvegarde le CSV
-print(f"\nFichier CSV généré : {output_csv}")
+df_all_clients.to_csv(output_csv, index=False)
