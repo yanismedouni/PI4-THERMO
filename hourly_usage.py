@@ -116,12 +116,10 @@ def _select_peak_week_from_available_months(
     if work.empty:
         raise ValueError("Saison vide : impossible de sélectionner une semaine.")
 
-    # Mois réellement disponibles dans les données
     months_present = sorted(work[ts_col].dt.month.dropna().unique().tolist())
     if not months_present:
         raise ValueError("Aucun mois disponible pour sélectionner une semaine.")
 
-    # Candidates = tous les jours entre min et max, mais start doit être dans un mois présent
     day_start = work[ts_col].min().normalize()
     day_end = work[ts_col].max().normalize()
     candidate_starts = pd.date_range(day_start, day_end, freq="D")
@@ -148,7 +146,6 @@ def _select_peak_week_from_available_months(
             best_score = float(score)
             best_start = s
 
-    # Fallback: première semaine possible dans un mois présent
     if best_start is None:
         s = day_start
         while s.month not in months_present and s <= day_end:

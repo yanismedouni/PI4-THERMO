@@ -284,14 +284,34 @@ def main(site: str = "newyork", equipment_keys: tuple[str, ...] = ("heat", "ac")
         elif "chauff" in equip.name.lower():
             ylabel = "P(chauffage ON)"
 
-        plot_proba_curve(out, title=f"{equip.name} – {site}", ylabel=ylabel)
+        season_label = "Saison analysée"
+        plot_proba_curve(out, equipment_name=equip.name)
 
         if hourly is not None:
             ws, we = hourly.peak_week_window
-            plot_hourly_curve(hourly.season_hourly, title=f"{equip.name} – {site} (Saison)", ylabel=ylabel, show_n_as_text=True)
-            plot_hourly_curve(hourly.peak_week_hourly, title=f"{equip.name} – {site} (Semaine pic: {ws.date()} → {we.date()})", ylabel=ylabel, show_n_as_text=True)
-            plot_hourly_curves_by_month(hourly.monthly_hourly, title=f"{equip.name} – {site} (Par mois)", ylabel=ylabel, months=equip.months)
 
+            # Saison
+            plot_hourly_curve(
+                hourly.season_hourly,
+                equipment_name=equip.name,
+                period_label="Saison",
+                show_context=False,
+            )
+
+            # Semaine pic=
+            plot_hourly_curve(
+                hourly.peak_week_hourly,
+                equipment_name=equip.name,
+                period_label="Semaine pic",
+                show_context=False,
+            )
+
+            # Par mois
+            plot_hourly_curves_by_month(
+                hourly.monthly_hourly,
+                equipment_name=equip.name,
+                show_context=False,
+            )
 if __name__ == "__main__":
     site = (sys.argv[1].strip().lower() if len(sys.argv) >= 2 else "newyork")
     main(site=site)
