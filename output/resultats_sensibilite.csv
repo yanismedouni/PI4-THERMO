@@ -1,0 +1,2 @@
+dataid,date,lambda1,d_min,x_DUTY_clim,x_DUTY_prime_clim,niveaux_clim,T_ext_MIN,T_ext_MAX,tp,fp,fn,tn,precision,rappel,f1,rmse,mae,statut_solveur,valeur_objectif
+661,2018-07-15,1.5,3,4.0,2.0,"[0.0, 0.5, 1.5, 2.5]",18.0,45.0,54,3,22,17,0.9474,0.7105,0.812,0.7689,0.5775,optimal_inaccurate,30.115
