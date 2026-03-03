@@ -382,6 +382,8 @@ def _metriques_nan() -> dict[str, float]:
         >>> _metriques_nan()['f1']
         nan
     """
+
+    
     return {
         "tp": 0, "fp": 0, "fn": 0, "tn": 0,
         "precision": float("nan"),
