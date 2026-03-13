@@ -1,0 +1,179 @@
+import os
+import numpy as np
+import pandas as pd
+from scipy.interpolate import CubicSpline
+
+# =============================
+# PARAMÈTRES interpolation (identiques à grid)
+# =============================
+MAX_GAP = 8          # 8 × 15 min = 2 heures
+EDGE_MARGIN = 8
+WINDOW = 8
+
+# =============================
+# CONFIG RÉGIONS
+# =============================
+REGIONS = {
+    "austin": {
+        "csv_path": "data/15minute_data_austin.csv",
+        "output_csv": "csv/output/tcls_interp_austin.csv",
+    },
+    "newyork": {
+        "csv_path": "data/15minute_data_newyork.csv",
+        "output_csv": "csv/output/tcls_interp_newyork.csv",
+    },
+    "california": {
+        "csv_path": "data/15minute_data_california.csv",
+        "output_csv": "csv/output/tcls_interp_california.csv",
+    },
+}
+
+# =============================
+# CANAUX À INTERPOLER
+# =============================
+COLS_AIR = ["air1", "air2", "air3"]
+COLS_FURNACE = ["furnace1", "furnace2"]
+COLS_HEATER = ["heater1", "heater2", "heater3"]
+
+COLS_TO_INTERP = COLS_AIR + COLS_FURNACE + COLS_HEATER
+
+
+def read_raw_csv_robust(path: str) -> pd.DataFrame:
+    """
+    Lecture robuste : essaye ',' puis ';'
+    """
+    df = pd.read_csv(path, sep=",")
+    df.columns = df.columns.str.strip()
+    if "dataid" in df.columns and "local_15min" in df.columns:
+        return df
+
+    df = pd.read_csv(path, sep=";")
+    df.columns = df.columns.str.strip()
+    if "dataid" in df.columns and "local_15min" in df.columns:
+        return df
+
+    raise ValueError(f"Impossible de lire correctement {path}. Colonnes: {df.columns.tolist()}")
+
+
+def interpoler_trous_courts_serie(y: pd.Series) -> pd.Series:
+    """
+    Interpolation spline sur trous courts (même logique que grid).
+    Les trous > MAX_GAP restent NaN.
+    """
+    t = np.arange(len(y))
+
+    is_nan = y.isna()
+    groups = (is_nan != is_nan.shift()).cumsum()
+    lengths = y[is_nan].groupby(groups[is_nan]).size()
+
+    y_interp = y.copy()
+
+    for group_id, length in lengths.items():
+        if length > MAX_GAP:
+            continue
+
+        idx = y[groups == group_id].index
+
+        if idx.min() < EDGE_MARGIN or idx.max() > len(y) - EDGE_MARGIN:
+            continue
+
+        i_start = max(idx.min() - WINDOW, 0)
+        i_end = min(idx.max() + WINDOW + 1, len(y))
+
+        y_local = y.iloc[i_start:i_end]
+        t_local = t[i_start:i_end]
+
+        mask = ~y_local.isna()
+        if mask.sum() < 4:
+            continue
+
+        cs = CubicSpline(t_local[mask], y_local[mask], bc_type="natural")
+        y_interp.loc[idx] = cs(t[idx])
+
+    # clamp négatifs
+    y_interp[y_interp < 0] = 0
+    return y_interp
+
+
+def pretraiter_canaux_par_client(df_raw: pd.DataFrame) -> pd.DataFrame:
+    """
+    Applique le même prétraitement que grid à CHAQUE canal :
+    - conversion timestamp (UTC -> Etc/GMT+6 -> tz-naive)
+    - groupby timestamp (mean)
+    - asfreq 15min
+    - interpolation trous courts par canal
+    Sortie : dataid, local_15min, <canal>_interp..., + clim + chauffage.
+    """
+    df = df_raw.copy()
+    df.columns = df.columns.str.strip()
+
+    # Assurer présence des colonnes (absentes -> NaN puis seront gérées)
+    for col in COLS_TO_INTERP:
+        if col not in df.columns:
+            df[col] = np.nan
+
+    # Conversion numérique + négatifs -> 0 (si valeur existe)
+    for col in COLS_TO_INTERP:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df.loc[df[col] < 0, col] = 0
+
+    # Timestamp
+    dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
+    dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
+    df["local_15min"] = dt_local.dt.tz_localize(None)
+
+    out_chunks = []
+
+    for dataid, df_client in df.groupby("dataid"):
+        print(f"Traitement client {dataid}")
+
+        keep_cols = ["local_15min"] + COLS_TO_INTERP
+        df_client = df_client[keep_cols].copy()
+
+        # Agrégation timestamps dupliqués
+        agg = {c: "mean" for c in COLS_TO_INTERP}
+        df_client = df_client.groupby("local_15min", as_index=False).agg(agg)
+
+        # Grille 15 min
+        df_client = df_client.set_index("local_15min").asfreq("15min").reset_index()
+
+        # Interpolation canal par canal
+        for col in COLS_TO_INTERP:
+            df_client[f"{col}_interp"] = interpoler_trous_courts_serie(df_client[col])
+
+        # Construction clim/chauffage APRÈS interpolation
+        df_client["clim"] = (
+            df_client["air1_interp"].fillna(0)
+            + df_client["air2_interp"].fillna(0)
+            + df_client["air3_interp"].fillna(0)
+        )
+
+        df_client["chauffage"] = (
+            df_client["furnace1_interp"].fillna(0)
+            + df_client["furnace2_interp"].fillna(0)
+            + df_client["heater1_interp"].fillna(0)
+            + df_client["heater2_interp"].fillna(0)
+            + df_client["heater3_interp"].fillna(0)
+        )
+
+        df_client["dataid"] = dataid
+
+        # Colonnes sortie
+        out_cols = ["dataid", "local_15min"] + [f"{c}_interp" for c in COLS_TO_INTERP] + ["clim", "chauffage"]
+        out_chunks.append(df_client[out_cols])
+
+    return pd.concat(out_chunks, ignore_index=True)
+
+
+if __name__ == "__main__":
+
+    for region, cfg in REGIONS.items():
+        print(f"\n================ TCLs {region.upper()} ================\n")
+        df_raw = read_raw_csv_robust(cfg["csv_path"])
+
+        df_out = pretraiter_canaux_par_client(df_raw)
+
+        os.makedirs(os.path.dirname(cfg["output_csv"]), exist_ok=True)
+        df_out.to_csv(cfg["output_csv"], index=False)
+
+        print(f"[OK] Fichier généré : {cfg['output_csv']}")

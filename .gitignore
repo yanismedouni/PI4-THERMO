@@ -20,3 +20,11 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Data (ne pas versionner)
+data/
+output/
+csv/output/
+
+# Mac
+.DS_Store

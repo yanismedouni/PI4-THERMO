@@ -4,90 +4,119 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 import os  # ← AJOUT
 
-# =============================
-# PARAMÈTRES
-# =============================
-MAX_GAP = 8   # 4 × 15 min = 1 heure
+import os
+import numpy as np
+import pandas as pd
+from scipy.interpolate import CubicSpline
 
-# =============================
-# 1) Chargement des données
-# =============================
-csv_path = "../data/15minute_data_austin.csv"
-df = pd.read_csv(csv_path)
+MAX_GAP = 8
+EDGE_MARGIN = 8
+WINDOW = 8
 
-# =============================
-# 2) Nettoyage du timestamp
-# =============================
-dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
-dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
-df["local_15min"] = dt_local.dt.tz_localize(None)
+REGIONS = {
+    "austin": {
+        "csv_path": "data/15minute_data_austin.csv",
+        "output_csv": "csv/output/solar_interp_austin.csv",
+    },
+    "newyork": {
+        "csv_path": "data/15minute_data_newyork.csv",
+        "output_csv": "csv/output/solar_interp_newyork.csv",
+    },
+    "california": {
+        "csv_path": "data/15minute_data_california.csv",
+        "output_csv": "csv/output/solar_interp_california.csv",
+    },
+}
 
-# =============================
-# 3) Sélection du ménage
-# =============================
-# =============================
-# Création d'un DataFrame pour tous les clients
-# =============================
-df_all_clients = pd.DataFrame()
-clients = df["dataid"].unique()
+def lire_csv_auto_sep(chemin_csv: str) -> pd.DataFrame:
+    df = pd.read_csv(chemin_csv, sep=",", low_memory=False)
+    df.columns = df.columns.str.strip()
+    if "dataid" in df.columns and "local_15min" in df.columns:
+        return df
 
-for dataid in clients:
+    df = pd.read_csv(chemin_csv, sep=";", low_memory=False)
+    df.columns = df.columns.str.strip()
+    if "dataid" in df.columns and "local_15min" in df.columns:
+        return df
 
-    print(f"Traitement du client {dataid}")
+    raise ValueError(f"Impossible de lire {chemin_csv}. Colonnes: {df.columns.tolist()}")
+def interpoler_solar_par_client(df):
 
-    df_client = df[df["dataid"] == dataid].copy()
+    df.columns = df.columns.str.strip()
 
-    # Sélection solar
-    df_client = df_client[["local_15min", "solar"]].copy()
-    df_client["solar"] = pd.to_numeric(df_client["solar"], errors="coerce")
-    df_client.loc[df_client["solar"] < 0, "solar"] = 0
+    # ⚠️ solar peut être solar + solar2 selon région
+    solar_cols = [c for c in ["solar", "solar2"] if c in df.columns]
 
-    # Mise sur grille 15 minutes
-    df_client = df_client.groupby("local_15min", as_index=False).mean(numeric_only=True)
-    df_client = df_client.set_index("local_15min").asfreq("15min").reset_index()
+    if not solar_cols:
+        raise ValueError("Aucune colonne solar trouvée")
 
-    y = df_client["solar"]
-    t = np.arange(len(y))
+    # timestamp
+    dt_utc = pd.to_datetime(df["local_15min"], errors="coerce", utc=True)
+    dt_local = dt_utc.dt.tz_convert("Etc/GMT+6")
+    df["local_15min"] = dt_local.dt.tz_localize(None)
 
-    df_client["is_nan"] = y.isna()
-    df_client["nan_group"] = (df_client["is_nan"] != df_client["is_nan"].shift()).cumsum()
+    df["solar_total"] = df[solar_cols].fillna(0).sum(axis=1)
 
-    nan_lengths = df_client[df_client["is_nan"]].groupby("nan_group").size()
-    y_interp = y.copy()
+    df_all = []
 
-    EDGE_MARGIN = 8
-    WINDOW = 8
+    for dataid in df["dataid"].unique():
 
-    for group_id, length in nan_lengths.items():
-        if length > MAX_GAP:
-            continue
+        df_client = df[df["dataid"] == dataid].copy()
+        df_client = df_client[["local_15min", "solar_total"]]
 
-        idx = df_client[df_client["nan_group"] == group_id].index
+        df_client = df_client.groupby("local_15min", as_index=False).mean()
+        df_client = df_client.set_index("local_15min").asfreq("15min").reset_index()
 
-        if idx.min() < EDGE_MARGIN or idx.max() > len(y) - EDGE_MARGIN:
-            continue
+        y = df_client["solar_total"]
+        t = np.arange(len(y))
 
-        i_start = max(idx.min() - WINDOW, 0)
-        i_end   = min(idx.max() + WINDOW + 1, len(y))
-        y_local = y.iloc[i_start:i_end]
-        t_local = t[i_start:i_end]
-        mask_local = ~y_local.isna()
-        if mask_local.sum() < 4:
-            continue
+        df_client["is_nan"] = y.isna()
+        df_client["nan_group"] = (df_client["is_nan"] != df_client["is_nan"].shift()).cumsum()
 
-        cs_local = CubicSpline(t_local[mask_local], y_local[mask_local], bc_type="natural")
-        y_interp.loc[idx] = cs_local(t[idx])
+        nan_lengths = df_client[df_client["is_nan"]].groupby("nan_group").size()
+        y_interp = y.copy()
 
-    y_interp[y_interp < 0] = 0
-    df_client["solar_interp"] = y_interp
+        for group_id, length in nan_lengths.items():
+            if length > MAX_GAP:
+                continue
 
-    df_client["dataid"] = dataid
-    df_all_clients = pd.concat([df_all_clients, df_client[["dataid", "local_15min", "solar_interp"]]], ignore_index=True)
+            idx = df_client[df_client["nan_group"] == group_id].index
 
-# =============================
-# Sauvegarde finale
-# =============================
-output_csv = "../csv/output/solar_interp.csv"
-os.makedirs(os.path.dirname(output_csv), exist_ok=True)  # crée le dossier s'il n'existe pas
-df_all_clients.to_csv(output_csv, index=False)           # sauvegarde le CSV
-print(f"Fichier CSV généré : {output_csv}")
+            if idx.min() < EDGE_MARGIN or idx.max() > len(y) - EDGE_MARGIN:
+                continue
+
+            i_start = max(idx.min() - WINDOW, 0)
+            i_end   = min(idx.max() + WINDOW + 1, len(y))
+
+            y_local = y.iloc[i_start:i_end]
+            t_local = t[i_start:i_end]
+
+            mask = ~y_local.isna()
+            if mask.sum() < 4:
+                continue
+
+            cs = CubicSpline(t_local[mask], y_local[mask], bc_type="natural")
+            y_interp.loc[idx] = cs(t[idx])
+
+        y_interp[y_interp < 0] = 0
+        df_client["solar_interp"] = y_interp
+        df_client["dataid"] = dataid
+
+        df_all.append(df_client[["dataid", "local_15min", "solar_interp"]])
+
+    return pd.concat(df_all, ignore_index=True)
+
+
+if __name__ == "__main__":
+
+    for region, cfg in REGIONS.items():
+
+        print(f"\n=== SOLAR {region.upper()} ===")
+
+        df = lire_csv_auto_sep(cfg["csv_path"])
+        df_out = interpoler_solar_par_client(df)
+
+        os.makedirs(os.path.dirname(cfg["output_csv"]), exist_ok=True)
+        df_out.to_csv(cfg["output_csv"], index=False)
+
+        print(f"[OK] {cfg['output_csv']} généré")
