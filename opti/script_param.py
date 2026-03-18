@@ -256,8 +256,8 @@ def run_scenario(dataid: int | None, date: str | None, chemin_csv: str) -> dict:
         "x_DUTY_clim":       duty_clim["x_DUTY"],
         "x_DUTY_prime_clim": duty_clim["x_DUTY_prime"],
         "niveaux_clim":      str(params["niveaux_puissance"]["climatisation"]),
+        "M":                 params["M"],           # ← ajouter cette ligne
         "T_ext_MIN":         params["thermique"]["climatisation"]["T_ext_MIN"],
-        "T_ext_MAX":         params["thermique"]["climatisation"]["T_ext_MAX"],
         # Métriques
         "tp":                metriques["tp"],
         "fp":                metriques["fp"],
