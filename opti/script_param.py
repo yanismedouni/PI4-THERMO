@@ -1,5 +1,5 @@
 # =============================================================================
-# Module      : run_miqp.py
+# Module      : script_param.py
 # Auteur      : Équipe THERMO — ELE8080
 # Date        : 2025-01
 # Description : Exécute UN seul run de désagrégation MIQP et calcule les
@@ -8,7 +8,7 @@
 #               Point de départ avant la boucle multi-runs.
 #
 # Usage :
-#   python run_miqp.py --dataid 661 --date 2018-07-15
+#   python script_param.py --dataid 661 --date 2018-07-15
 # =============================================================================
  
 import argparse
@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from parametres import obtenir_parametres_defaut, afficher_parametres
 from modele_opti import creer_modele_optimisation, resoudre_optimisation
 from main_opti   import charger_journee, construire_donnees_modele
+from graph       import tracer_desagregation
  
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION
@@ -233,6 +234,9 @@ def run_scenario(dataid: int | None, date: str | None, chemin_csv: str) -> dict:
     print(f"    Pas ON réels                 : {nb_on}")
  
     metriques = calculer_metriques(o_estime, o_reel, p_estimee, p_clim_reel)
+
+    # Biais moyen signé — positif = on sous-estime, négatif = on sur-estime
+    diff_moy = round(float(np.mean(p_clim_reel - p_estimee)), 4)
  
     # Gap relatif exposé par modele_opti — qualité de la solution MIP
     gap = resultats.get("gap_relatif", float("nan"))
@@ -272,6 +276,7 @@ def run_scenario(dataid: int | None, date: str | None, chemin_csv: str) -> dict:
         "f1":                metriques["f1"],
         "rmse":              metriques["rmse"],
         "mae":               metriques["mae"],
+        "diff_moy":          diff_moy,
         # Info solveur — commit 2 : ajout gap_relatif
         "statut_solveur":    resultats["statut"],
         "valeur_objectif":   round(resultats["valeur_optimale"], 4),
@@ -281,6 +286,11 @@ def run_scenario(dataid: int | None, date: str | None, chemin_csv: str) -> dict:
     # ── 7. Écriture CSV ───────────────────────────────────────────────────────
     print("\n[8] Écriture dans le CSV...")
     ecrire_ligne_csv(chemin_csv, ligne)
+    # ── 8. Graphiques ────────────────────────────────────────────────────────
+    print(chr(10) + '[9] Generation des graphiques...')
+    tracer_desagregation(donnees, resultats, params, df_jour,
+                         dataid_reel, date_reel)
+
  
     return ligne
  
@@ -318,4 +328,3 @@ def main() -> None:
  
 if __name__ == "__main__":
     main()
- 

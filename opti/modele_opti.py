@@ -18,6 +18,7 @@ CORRECTIONS (v3) :
               la construction du modele.
 """
 
+import pprint
 import cvxpy as cp
 import numpy as np
 
@@ -158,18 +159,6 @@ def creer_modele_optimisation(donnees, parametres):
         contraintes.append(cp.sum(x_a_l[:, 1:], axis=1) == o_a)
 
         # ── eq17/18 : contraintes thermiques Big-M — vectorise ────────────────
-        #
-        # CLIMATISATION :
-        #   3 zones :
-        #   T_ext < T_MIN           => u_a force a 0 (clim interdite)
-        #   T_MIN <= T_ext <= T_MAX => u_a libre (optimiseur decide)
-        #   T_ext > T_MAX           => u_a force a 1 (clim toujours autorisee)
-        #
-        # CHAUFFAGE (logique inverse) :
-        #   T_ext > T_MAX           => u_a force a 0 (chauffage interdit)
-        #   T_MIN <= T_ext <= T_MAX => u_a libre (optimiseur decide)
-        #   T_ext < T_MIN           => u_a force a 1 (chauffage toujours autorise)
-
         if mode == 'climatisation':
             contraintes.append(T_ext - T_MAX <= M * u_a)            # eq17
             contraintes.append(T_ext - T_MIN >= -M * (1 - u_a))     # eq18
@@ -178,26 +167,10 @@ def creer_modele_optimisation(donnees, parametres):
             contraintes.append(T_ext - T_MIN >= -M * u_a)           # eq18
 
         # ── eq12/13 : transitions ON/OFF — vectorise ──────────────────────────
-        # eq12 : o_a(t) - o_a(t-1) = s_a(t) - f_a(t)
         contraintes.append(o_a[1:] - o_a[:-1] == s_a[1:] - f_a[1:])
-        # eq13 : s_a(t) + f_a(t) <= 1
         contraintes.append(s_a[1:] + f_a[1:] <= 1)
 
-        # ── eq14 : duree minimale de cycle ────────────────────────────────────
-        #if d_min > 1:
-        #    for t in range(T - d_min + 1):
-        #        contraintes.append(
-        #            cp.sum(s_a[t:t + d_min]) + cp.sum(f_a[t:t + d_min]) <= 1
-        #        )
-
         # ── eq15/16 : duty-cycle conditionne a la temperature ─────────────────
-        #
-        # On filtre les indices ou l'appareil est thermiquement autorisable
-        # pour eviter tout conflit avec les contraintes thermiques hors-saison.
-        #
-        # Ex: en hiver, si aucun pas de pointe n'a T_ext >= T_MIN pour la clim,
-        # les contraintes duty-cycle ne sont pas ajoutees => pas de conflit.
-
         if mode == 'climatisation':
             pointe_ok      = [i for i in indices_pointe      if T_ext[i] >= T_MIN]
             hors_pointe_ok = [i for i in indices_hors_pointe if T_ext[i] >= T_MIN]
@@ -249,7 +222,7 @@ def creer_modele_optimisation(donnees, parametres):
     }
 
 
-def resoudre_optimisation(modele, verbose=False):
+def resoudre_optimisation(modele, verbose=True):
     """Resout le probleme avec MOSEK. Retourne None si echec."""
     print("\n" + "=" * 70)
     print("RESOLUTION DU PROBLEME")
@@ -262,7 +235,7 @@ def resoudre_optimisation(modele, verbose=False):
             verbose=verbose,
             mosek_params={
                 'MSK_DPAR_MIO_TOL_REL_GAP': 0.05,  # 5% gap acceptable
-                'MSK_DPAR_MIO_MAX_TIME':     240.0, # max 4 minutes
+                'MSK_DPAR_MIO_MAX_TIME':    60.0, # max 1 minutes
             }
         )
     except Exception as e:
@@ -275,10 +248,46 @@ def resoudre_optimisation(modele, verbose=False):
         return None
     print(f"Valeur objectif : {probleme.value:.6f}")
 
+    # ── Debug solver_stats pour identifier la cle du gap relatif ─────────────
+    # Ce bloc affiche tous les attributs disponibles apres la resolution.
+    # Une fois la bonne cle identifiee, ce bloc sera retire.
+    print("\n--- DEBUG solver_stats ---")
+    try:
+        stats = probleme.solver_stats
+        pprint.pprint(vars(stats))
+    except Exception as e:
+        print(f"  solver_stats indisponible : {e}")
+    print("--- FIN DEBUG ---\n")
+
+    # ── Extraction du gap relatif ─────────────────────────────────────────────
+    # Tentative sur les attributs connus de cvxpy selon la version installee.
+    # solver_stats.extra_stats est un dict MOSEK-specific disponible en cvxpy>=1.3
+    gap_relatif = float("nan")
+    try:
+        stats = probleme.solver_stats
+        # Attribut direct (cvxpy >= 1.4)
+        if hasattr(stats, 'mip_gap'):
+            gap_relatif = float(stats.mip_gap)
+        # Dict extra_stats (cvxpy 1.3.x avec MOSEK)
+        elif hasattr(stats, 'extra_stats') and isinstance(stats.extra_stats, dict):
+            for cle in ('mioGap', 'mip_gap', 'MIPGap', 'gap'):
+                if cle in stats.extra_stats:
+                    gap_relatif = float(stats.extra_stats[cle])
+                    break
+    except Exception:
+        gap_relatif = float("nan")
+
+    import math
+    if not math.isnan(gap_relatif):
+        print(f"Relative gap    : {gap_relatif:.4%}")
+    else:
+        print("Relative gap    : n/d")
+
     variables = modele['variables']
     resultats = {
         'statut':          probleme.status,
         'valeur_optimale': probleme.value,
+        'gap_relatif':     gap_relatif,
         'p_BASE':          variables['p_BASE'].value,
         'appareils':       {},
     }
