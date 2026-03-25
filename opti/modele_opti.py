@@ -234,8 +234,8 @@ def resoudre_optimisation(modele, verbose=True):
             solver=cp.MOSEK,
             verbose=verbose,
             mosek_params={
-                'MSK_DPAR_MIO_TOL_REL_GAP': 0.05,  # 5% gap acceptable
-                'MSK_DPAR_MIO_MAX_TIME':    60.0, # max 1 minutes
+                'MSK_DPAR_MIO_TOL_REL_GAP': 0.05,  # 5% gap acceptable, actually useless because unataignable in 4min
+                'MSK_DPAR_MIO_MAX_TIME':   240.0, # max 1 minutes
             }
         )
     except Exception as e:
