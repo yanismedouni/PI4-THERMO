@@ -22,8 +22,8 @@ venv/
 Thumbs.db
 
 #big data files
-15minute_data_austin.csv
 *.csv
+*.png
 
 
 c&p.bash
