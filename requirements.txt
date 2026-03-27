@@ -1,9 +1,33 @@
-# Dépendances pour l'algorithme de désagrégation
-# Python 3.8+
+# ===================================
+# Dépendances — Projet THERMO NILM
+# Python 3.13+
+# ===================================
 
-numpy>=1.21.0
-mosek>=10.0.0
+# -- Calcul numérique ----------------
+numpy>=2.1.0
 
-# Note : MOSEK nécessite une licence
+# -- Manipulation de données ----------------
+pandas>=2.2.3
+
+# -- Optimisation (MICQP) ----------------
+cvxpy>=1.5.2
+mosek>=11.1.3
+# Note : MOSEK nécessite une licence séparée
+# - Licence commerciale : https://www.mosek.com/sales/
 # - Licence académique gratuite : https://www.mosek.com/products/academic-licenses/
 # - Licence d'essai : https://www.mosek.com/products/trial/
+# Placer le fichier mosek.lic dans :
+#   Windows : C:\Users\<Nom>\mosek\mosek.lic
+#   macOS / Linux : ~/mosek/mosek.lic
+
+# -- Machine learning / clustering ----------------
+scikit-learn>=1.6.0
+
+# -- Visualisation ----------------
+matplotlib>=3.10.0
+seaborn>=0.13.0
+
+# -- Données météo (Open-Meteo) ----------------
+openmeteo-requests>=1.2.0
+requests-cache>=1.2.0
+retry-requests>=2.0.0
