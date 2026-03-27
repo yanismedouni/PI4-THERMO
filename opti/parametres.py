@@ -57,7 +57,7 @@ def obtenir_parametres_defaut():
         # Trop faible => baseload absorbe tout, clim reste a 0.
         # Trop eleve  => baseload completement plat, faux positifs sur la clim.
         # Plage suggeree pour des donnees en kW : 1.0 a 5.0
-        'lambda1': 1.5,             # CORRECTION : etait 2.0, reduit pour permettre plus de flexibilité au baseload
+        'lambda1': 1.0,             # CORRECTION : etait 2.0, reduit pour permettre plus de flexibilité au baseload
 
         # Contraintes operationnelles communes
         # d_min = 2 => duree minimale ON/OFF de 30 minutes (2 x 15 min)
@@ -91,7 +91,7 @@ def obtenir_parametres_defaut():
             'climatisation': {
                 'mode':      'climatisation',
                 'T_ext_MIN': 18.0,
-                'T_ext_MAX': 45.0,  # CORRECTION : etait 28.0
+                'T_ext_MAX': 45.0, 
             },
             'chauffage': {
                 'mode':      'chauffage',
@@ -106,7 +106,7 @@ def obtenir_parametres_defaut():
         'duty_cycle': {
             'climatisation': {
                 'x_DUTY':       4.0,
-                'x_DUTY_prime': 2.0,
+                'x_DUTY_prime': 4.0,
             },
             'chauffage': {
                 'x_DUTY':       4.0,
