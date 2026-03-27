@@ -1,12 +1,6 @@
 """
 Point d'entree pour l'optimisation MICQP de desagregation des TCLs.
 
-L'algorithme voit uniquement la colonne 'grid' (consommation nette de la maison)
-et estime la contribution de chaque appareil TCL (climatisation et/ou chauffage).
-
-Les colonnes desagreees (air1, furnace1, etc.) sont utilisees uniquement
-pour la validation des resultats, jamais par l'optimiseur.
-
 Usage :
     python opti/optiUneSemaine.py
     python opti/optiUneSemaine.py --dataid 1642
@@ -47,9 +41,8 @@ PAS_PAR_JOUR          = 96
 NB_JOURS              = 7
 PAS_PAR_SEMAINE       = PAS_PAR_JOUR * NB_JOURS
 
-# Valeurs MOSEK par défaut — modifiables via --max_time et --gap
-MAX_TIME_DEFAUT = 240.0   # secondes (4 minutes)
-GAP_DEFAUT      = 0.05    # 5% de gap relatif acceptable
+MAX_TIME_DEFAUT = 240.0
+GAP_DEFAUT      = 0.05
 
 COLONNES_TCL = {
     "climatisation": ["air1", "air2", "air3"],
@@ -63,24 +56,12 @@ COLONNES_TCL = {
 
 def resoudre_optimisation(
     modele: dict,
-    verbose: bool = False,
+    verbose: bool = True,
     max_time: float = MAX_TIME_DEFAUT,
     gap: float = GAP_DEFAUT,
 ) -> dict | None:
     """
     Résout le problème MICQP avec MOSEK.
-
-    Paramètres :
-    -----------
-    modele   : dict retourné par creer_modele_optimisation()
-    verbose  : afficher les logs détaillés de MOSEK
-    max_time : temps de calcul maximal en secondes (défaut : 240 s)
-    gap      : gap relatif acceptable entre la borne et la solution (défaut : 0.05 = 5%)
-               Plus petit = solution plus précise mais plus lente.
-
-    Retourne :
-    ---------
-    dict de résultats, ou None si échec.
     """
     print("\n" + "=" * 70)
     print("RÉSOLUTION DU PROBLÈME")
@@ -88,6 +69,7 @@ def resoudre_optimisation(
     print(f"  Solveur          : MOSEK")
     print(f"  Temps max        : {max_time:.0f} s")
     print(f"  Gap relatif cible: {gap * 100:.1f} %")
+    sys.stdout.flush()
 
     probleme = modele["probleme"]
 
@@ -103,6 +85,8 @@ def resoudre_optimisation(
     except Exception as e:
         print(f"ERREUR MOSEK : {e}")
         return None
+
+    sys.stdout.flush()
 
     print(f"\n  Statut           : {probleme.status}")
 
@@ -159,18 +143,6 @@ def charger_semaine_clients(
     nb_clients: int = NB_CLIENTS_PAR_DEFAUT,
     dataid: int | None = None,
 ) -> list[dict]:
-    """
-    Charge une semaine de données pour les clients sélectionnés.
-
-    Paramètres :
-    -----------
-    date_debut : str | None
-        Date de début au format YYYY-MM-DD.
-    nb_clients : int
-        Nombre de premiers clients à traiter si dataid est None.
-    dataid : int | None
-        ID spécifique du client à traiter. Si fourni, nb_clients est ignoré.
-    """
     if not DATA_PATH.exists():
         raise FileNotFoundError(
             f"Fichier CSV introuvable : {DATA_PATH}\n"
@@ -473,7 +445,7 @@ def executer_client(
     print("\n[5] Résolution...")
     resultats = resoudre_optimisation(
         modele,
-        verbose=False,
+        verbose=True,
         max_time=max_time,
         gap=gap,
     )
@@ -500,32 +472,13 @@ Exemples :
   python optiUneSemaine.py --nb_clients 3
         """,
     )
-    parser.add_argument(
-        "--dataid", type=int, default=None,
-        help="ID spécifique du client (ex. 1642). Si omis, prend les nb_clients premiers.",
-    )
-    parser.add_argument(
-        "--date", type=str, default=DATE_DEBUT_PAR_DEFAUT,
-        help=f"Date de début YYYY-MM-DD (défaut : {DATE_DEBUT_PAR_DEFAUT})",
-    )
-    parser.add_argument(
-        "--nb_clients", type=int, default=NB_CLIENTS_PAR_DEFAUT,
-        help=f"Nombre de premiers clients si --dataid omis (défaut : {NB_CLIENTS_PAR_DEFAUT})",
-    )
-    parser.add_argument(
-        "--max_time", type=float, default=MAX_TIME_DEFAUT,
-        help=(
-            f"Temps de calcul maximal MOSEK en secondes (défaut : {MAX_TIME_DEFAUT:.0f} s). "
-            "Augmenter pour des solutions plus précises sur de grands horizons."
-        ),
-    )
-    parser.add_argument(
-        "--gap", type=float, default=GAP_DEFAUT,
-        help=(
-            f"Gap relatif acceptable MOSEK, entre 0 et 1 (défaut : {GAP_DEFAUT} = {GAP_DEFAUT*100:.0f}%%). "
-            "Réduire pour une solution plus précise (ex. 0.01 = 1%%), au prix d'un temps plus long."
-        ),
-    )
+    parser.add_argument("--dataid",     type=int,   default=None)
+    parser.add_argument("--date",       type=str,   default=DATE_DEBUT_PAR_DEFAUT)
+    parser.add_argument("--nb_clients", type=int,   default=NB_CLIENTS_PAR_DEFAUT)
+    parser.add_argument("--max_time",   type=float, default=MAX_TIME_DEFAUT,
+        help=f"Temps max MOSEK en secondes (défaut : {MAX_TIME_DEFAUT:.0f} s)")
+    parser.add_argument("--gap",        type=float, default=GAP_DEFAUT,
+        help=f"Gap relatif MOSEK entre 0 et 1 (défaut : {GAP_DEFAUT} = {GAP_DEFAUT*100:.0f}%%)")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -544,13 +497,18 @@ Exemples :
     )
 
     for item in semaines_clients:
-        executer_client(
-            dataid    =item["dataid"],
-            date_debut=item["date_debut"],
-            df_client =item["df"],
-            max_time  =args.max_time,
-            gap       =args.gap,
-        )
+        try:
+            executer_client(
+                dataid    =item["dataid"],
+                date_debut=item["date_debut"],
+                df_client =item["df"],
+                max_time  =args.max_time,
+                gap       =args.gap,
+            )
+        except KeyboardInterrupt:
+            print(f"\n⚠️  Interruption — client {item['dataid']} abandonné.")
+            print("✔ Les clients précédents ont été sauvegardés dans output/")
+            break
 
     print("\n" + "=" * 70)
     print("✔ Pipeline terminé.")
