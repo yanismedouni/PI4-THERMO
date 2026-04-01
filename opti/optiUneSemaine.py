@@ -35,14 +35,14 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 DATA_PATH = PROJECT_DIR / "csv" / "california_processed_energy_data.csv"
 
-DATE_DEBUT_PAR_DEFAUT = "2015-07-02"
-NB_CLIENTS_PAR_DEFAUT = 12
+DATE_DEBUT_PAR_DEFAUT = "2014-07-01"
+NB_CLIENTS_PAR_DEFAUT = 1
 PAS_PAR_JOUR          = 96
 NB_JOURS              = 7
 PAS_PAR_SEMAINE       = PAS_PAR_JOUR * NB_JOURS
 
-MAX_TIME_DEFAUT = 240.0
-GAP_DEFAUT      = 0.05
+MAX_TIME_DEFAUT = 600
+GAP_DEFAUT      = 0.7
 
 COLONNES_TCL = {
     "climatisation": ["air1", "air2", "air3"],
@@ -466,7 +466,7 @@ Exemples :
   python optiUneSemaine.py
   python optiUneSemaine.py --dataid 1642
   python optiUneSemaine.py --dataid 1642 --date 2015-08-10
-  python optiUneSemaine.py --dataid 1642 --max_time 480
+  python optiUneSemaine.py --dataid 1642 --max_time 480x
   python optiUneSemaine.py --dataid 1642 --gap 0.01
   python optiUneSemaine.py --dataid 1642 --max_time 600 --gap 0.01
   python optiUneSemaine.py --nb_clients 3

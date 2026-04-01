@@ -144,7 +144,12 @@ def creer_modele_optimisation(donnees, parametres):
         x_DUTY        = duty['x_DUTY']
         x_DUTY_prime  = duty['x_DUTY_prime']
 
+
+        # SDT 03-31 ajout de cette contrainte disjonctive qui permet de ne pas autoriser le tcl à s'allumer si grid <0.5
+        contraintes.append(P_total - 0.5 >= -M * (1 - o_a))
+
         # ── Pas de transition au premier pas ──────────────────────────────────
+        contraintes.append(P_total == p_BASE+P_appareils_total) #SDT 03-31 total en somme ajouté
         contraintes.append(s_a[0] == 0)
         contraintes.append(f_a[0] == 0)
 
@@ -261,8 +266,8 @@ def resoudre_optimisation(modele, verbose=False):
             solver=cp.MOSEK,
             verbose=verbose,
             mosek_params={
-                'MSK_DPAR_MIO_TOL_REL_GAP': 0.05,  # 5% gap acceptable
-                'MSK_DPAR_MIO_MAX_TIME':     240.0, # max 4 minutes
+                'MSK_DPAR_MIO_TOL_REL_GAP': 0.25,  # 5% gap acceptable
+                
             }
         )
     except Exception as e:

@@ -90,7 +90,7 @@ def obtenir_parametres_defaut():
         'thermique': {
             'climatisation': {
                 'mode':      'climatisation',
-                'T_ext_MIN': 18.0,
+                'T_ext_MIN': 23.0,
                 'T_ext_MAX': 45.0, 
             },
             'chauffage': {
