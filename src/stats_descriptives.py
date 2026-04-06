@@ -2,56 +2,28 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import Optional, Sequence
 from pathlib import Path
 
-
-# ══════════════════════════════════════════════════════════════════════
-# UTILITAIRES
-# ══════════════════════════════════════════════════════════════════════
-
-def load_results_csv(
-    csv_path: str,
-    encoding: str = "utf-8",
-    sep: Optional[str] = None,
-    usecols: Optional[Sequence[str]] = None,
-) -> pd.DataFrame:
-    return pd.read_csv(
-        csv_path,
-        encoding=encoding,
-        sep=sep or None,
-        engine="python",
-        usecols=usecols,
-    )
-
-
-def _require_cols(df: pd.DataFrame, cols: Sequence[str]) -> None:
-    missing = [c for c in cols if c not in df.columns]
-    if missing:
-        raise ValueError(f"Colonnes manquantes : {missing}")
-
-
-def _save(fig: plt.Figure, path: Path, name: str) -> None:
-    fig.savefig(path / name, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"    {name}")
+from data_loader import (
+    BASE_DIR, SEUIL_ON, ORDRE_SAISONS, COULEURS_REGIONS,
+    _save, get_couleur, charger_sources,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+# "region"       → données régionales (processed_energy_data_*.csv)
+# "desagregation" → résultats de désagrégation (resultats_desagregation_*.csv)
+MODE = "desagregation"
 
-# Régions à analyser : nom affiché → nom du fichier CSV
-REGIONS = {
-    "Austin"    : "processed_energy_data_austin.csv",
-    "California": "processed_energy_data_california.csv",
-    "New York"  : "processed_energy_data_newyork.csv",
-}
+# En mode "desagregation" : liste de fichiers à analyser (dans data/).
+# Laisser vide [] pour charger tous les fichiers de désagrégation disponibles.
+FICHIERS_DESAGREGATION = [
+    # "resultats_desagregation_1417_2019-08-01_7jours.csv",
+]
 
-DATAID         = None    # None = tous les clients, int = un seul client
-SEUIL_ON       = 0.05    # kW - seuil de détection état ON
 BINS_PUISSANCE = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
 LABELS_BINS    = ["0–0.5", "0.5–1.0", "1.0–1.5",
                   "1.5–2.0", "2.0–2.5", "2.5–3.0"]
@@ -64,101 +36,27 @@ PALETTE = {
     "gris"      : "#888888",
 }
 
-ORDRE_SAISONS   = ["Hiver", "Printemps", "Été", "Automne"]
 PALETTE_SAISONS = ["#D6E4F0", "#2E75B6", "#1F3864", "#0A1628"]
 
-MAP_SAISON = {
-    12: "Hiver",     1: "Hiver",     2: "Hiver",
-     3: "Printemps", 4: "Printemps", 5: "Printemps",
-     6: "Été",       7: "Été",       8: "Été",
-     9: "Automne",  10: "Automne",  11: "Automne",
-}
-
-# Couleur distincte par région pour les graphiques comparatifs
-COULEURS_REGIONS = {
-    "Austin"    : "#2E75B6",
-    "California": "#E06C2E",
-    "New York"  : "#2E8B57",
-}
-
 
 # ══════════════════════════════════════════════════════════════════════
-# CHARGEMENT D'UNE RÉGION
+# STATISTIQUES DESCRIPTIVES D'UNE RÉGION / SOURCE
 # ══════════════════════════════════════════════════════════════════════
 
-def charger_region(nom_region: str, nom_fichier: str) -> pd.DataFrame:
-    """Charge et nettoie le CSV d'une région. Retourne un DataFrame prêt."""
-    csv_path = BASE_DIR / "data" / nom_fichier
-    if not csv_path.exists():
-        print(f"    Fichier introuvable : {csv_path} - région ignorée.")
-        return pd.DataFrame()
-
-    cols = ["dataid", "year", "month", "day", "hour", "minute",
-            "temp", "grid", "clim", "chauffage"]
-
-    df = load_results_csv(str(csv_path), usecols=cols)
-
-    try:
-        _require_cols(df, cols)
-    except ValueError as e:
-        print(f"    {nom_region} : {e} - région ignorée.")
-        return pd.DataFrame()
-
-    # Reconstruction datetime sans local_15min
-    df["datetime"] = pd.to_datetime({
-        "year": df["year"], "month": df["month"], "day": df["day"],
-        "hour": df["hour"], "minute": df["minute"],
-    }, errors="coerce")
-
-    n_nat = df["datetime"].isna().sum()
-    if n_nat > 0:
-        print(f"   {nom_region} : {n_nat} horodatages invalides → exclus")
-        df = df.dropna(subset=["datetime"])
-
-    # Nettoyage numérique
-    for col in ["grid", "clim", "chauffage", "temp"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["clim"]      = df["clim"].fillna(0)
-    df["chauffage"] = df["chauffage"].fillna(0)
-    df = df.dropna(subset=["grid"])
-
-    # Filtrage client optionnel
-    if DATAID is not None:
-        df = df[df["dataid"] == DATAID]
-
-    df = df.set_index("datetime").sort_index()
-    df["saison"] = df["month"].map(MAP_SAISON)
-    df["region"] = nom_region
-
-    print(f"  {nom_region} : {len(df):,} observations chargées")
-    return df
-
-
-# ══════════════════════════════════════════════════════════════════════
-# STATISTIQUES DESCRIPTIVES D'UNE RÉGION
-# ══════════════════════════════════════════════════════════════════════
-
-def calculer_stats(df: pd.DataFrame, region: str) -> pd.Series:
-    """Retourne un pd.Series de statistiques descriptives pour une région."""
-    P = df["clim"]
-    P_on = P[P > SEUIL_ON]
+def calculer_stats(df: pd.DataFrame, label: str) -> pd.Series:
+    P     = df["clim"]
+    P_on  = P[P > SEUIL_ON]
     mode_on = P_on.mode()
 
     return pd.Series({
-        # Tendance centrale
         "Moyenne (kW)"               : P.mean(),
         "Médiane (kW)"               : P.median(),
         "Mode - états ON (kW)"       : mode_on.iloc[0] if not mode_on.empty else float("nan"),
-        # Dispersion
         "Écart-type (kW)"            : P.std(),
         "Variance (kW²)"             : P.var(),
         "Min (kW)"                   : P.min(),
         "Max (kW)"                   : P.max(),
         "Coeff. de variation (%)"    : (P.std() / P.mean()) * 100,
-        # Forme
-        "Asymétrie (skewness)"       : P.skew(),
-        "Aplatissement (kurtosis)"   : P.kurt(),
-        # Percentiles
         "P5  (kW)"                   : P.quantile(0.05),
         "P10 (kW)"                   : P.quantile(0.10),
         "Q1  (kW)"                   : P.quantile(0.25),
@@ -167,20 +65,18 @@ def calculer_stats(df: pd.DataFrame, region: str) -> pd.Series:
         "P90 (kW)"                   : P.quantile(0.90),
         "P95 (kW)"                   : P.quantile(0.95),
         "IQR (kW)"                   : P.quantile(0.75) - P.quantile(0.25),
-        # Activité
         "% temps ON"                 : (P > SEUIL_ON).mean() * 100,
-    }, name=region).round(4)
+    }, name=label).round(4)
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GRAPHIQUES PAR RÉGION
+# GRAPHIQUES PAR SOURCE
 # ══════════════════════════════════════════════════════════════════════
 
-def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
-    """Génère les 7 graphiques descriptifs pour une région."""
-    P      = df["clim"]
-    P_on   = P[P > SEUIL_ON]
-    couleur = COULEURS_REGIONS.get(region, PALETTE["principal"])
+def graphiques_region(df: pd.DataFrame, label: str, out_dir: Path) -> None:
+    P       = df["clim"]
+    P_on    = P[P > SEUIL_ON]
+    couleur = get_couleur(label)
 
     # G1 - Histogramme
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -191,12 +87,13 @@ def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
                label=f"Médiane = {P.median():.3f} kW")
     ax.set_xlabel("Puissance (kW)")
     ax.set_ylabel("Fréquence")
-    ax.set_title(f"Distribution des puissances - Climatisation ({region})")
+    ax.set_title(f"Distribution des puissances - États ON uniquement ({label})")
     ax.legend()
     plt.tight_layout()
     _save(fig, out_dir, "G1_histogramme.png")
 
     # G2 - Fréquences par intervalles
+    df = df.copy()
     df["intervalle"] = pd.cut(P, bins=BINS_PUISSANCE,
                                labels=LABELS_BINS, right=True)
     freq_rel = (df["intervalle"].value_counts(normalize=True)
@@ -211,7 +108,7 @@ def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
                 f"{val:.1f}%", ha="center", va="bottom", fontsize=9)
     ax.set_xlabel("Intervalle de puissance (kW)")
     ax.set_ylabel("Fréquence relative (%)")
-    ax.set_title(f"Distribution des fréquences par intervalles ({region})")
+    ax.set_title(f"Distribution des fréquences par intervalles ({label})")
     plt.tight_layout()
     _save(fig, out_dir, "G2_freq_intervalles.png")
 
@@ -221,10 +118,9 @@ def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
                 order=ORDRE_SAISONS, palette=PALETTE_SAISONS, ax=ax)
     ax.set_xlabel("Saison")
     ax.set_ylabel("Puissance climatisation (kW)")
-    ax.set_title(f"Distribution par saison ({region})")
+    ax.set_title(f"Distribution par saison ({label})")
     plt.tight_layout()
     _save(fig, out_dir, "G3_boxplot_saison.png")
-
 
     # G4 - Profil horaire moyen
     profil = df.groupby("hour")["clim"].agg(["mean", "std"])
@@ -236,7 +132,7 @@ def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
                     alpha=0.2, color=couleur, label="±1 écart-type")
     ax.set_xlabel("Heure de la journée")
     ax.set_ylabel("Puissance (kW)")
-    ax.set_title(f"Profil horaire moyen - Climatisation ({region})")
+    ax.set_title(f"Profil horaire moyen - Climatisation ({label})")
     ax.set_xticks(range(0, 24))
     ax.legend()
     plt.tight_layout()
@@ -252,49 +148,48 @@ def graphiques_region(df: pd.DataFrame, region: str, out_dir: Path) -> None:
     sns.heatmap(pivot, cmap="YlOrRd", ax=ax, linewidths=0.3,
                 linecolor="#eeeeee",
                 cbar_kws={"label": "Puissance moyenne (kW)"})
-    ax.set_title(f"Consommation moyenne - Heure × Mois ({region})")
+    ax.set_title(f"Consommation moyenne - Heure × Mois ({label})")
     ax.set_ylabel("Heure")
     ax.set_xlabel("Mois")
     plt.tight_layout()
     _save(fig, out_dir, "G5_heatmap_heure_mois.png")
 
 
-
 # ══════════════════════════════════════════════════════════════════════
-# GRAPHIQUES COMPARATIFS TOUTES RÉGIONS
+# GRAPHIQUES COMPARATIFS TOUTES SOURCES
 # ══════════════════════════════════════════════════════════════════════
 
 def graphiques_comparatifs(dfs: dict, out_dir: Path) -> None:
-    """Génère les graphiques comparant les 3 régions simultanément."""
+
+    couleurs = [get_couleur(lbl) for lbl in dfs]
 
     # GC1 - Profils horaires superposés
     fig, ax = plt.subplots(figsize=(12, 5))
-    for region, df in dfs.items():
+    for label, df in dfs.items():
         profil = df.groupby("hour")["clim"].mean()
         ax.plot(profil.index, profil.values, lw=2,
-                color=COULEURS_REGIONS[region], label=region)
+                color=get_couleur(label), label=label)
     ax.set_xlabel("Heure de la journée")
     ax.set_ylabel("Puissance moyenne (kW)")
-    ax.set_title("Profils horaires moyens - Comparaison régions")
+    ax.set_title("Profils horaires moyens - Comparaison")
     ax.set_xticks(range(0, 24))
     ax.legend()
     plt.tight_layout()
     _save(fig, out_dir, "GC1_profils_horaires_comparatif.png")
 
-    # GC2 - Boxplots côte à côte par région
+    # GC2 - Boxplots côte à côte
     df_all = pd.concat(dfs.values())
     fig, ax = plt.subplots(figsize=(12, 5))
     sns.boxplot(data=df_all, x="region", y="clim",
                 order=list(dfs.keys()),
-                palette=list(COULEURS_REGIONS.values()),
-                ax=ax)
-    ax.set_xlabel("Région")
+                palette=couleurs, ax=ax)
+    ax.set_xlabel("Source")
     ax.set_ylabel("Puissance climatisation (kW)")
-    ax.set_title("Distribution de la climatisation par région")
+    ax.set_title("Distribution de la climatisation par source")
     plt.tight_layout()
     _save(fig, out_dir, "GC2_boxplot_regions.png")
 
-    # GC3 - % temps ON par région et saison
+    # GC3 - % temps ON par source et saison
     pct_on = (df_all.groupby(["region", "saison"])["clim"]
               .apply(lambda x: (x > SEUIL_ON).mean() * 100)
               .unstack("saison")
@@ -304,10 +199,10 @@ def graphiques_comparatifs(dfs: dict, out_dir: Path) -> None:
     pct_on.plot(kind="bar", ax=ax,
                 color=["#D6E4F0", "#2E75B6", "#1F3864", "#0A1628"],
                 edgecolor="white")
-    ax.set_xlabel("Région")
+    ax.set_xlabel("Source")
     ax.set_ylabel("% temps ON")
-    ax.set_title("Pourcentage de temps ON - Par région et saison")
-    ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+    ax.set_title("Pourcentage de temps ON - Par source et saison")
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=15)
     ax.legend(title="Saison")
     plt.tight_layout()
     _save(fig, out_dir, "GC3_pct_on_region_saison.png")
@@ -320,28 +215,23 @@ def graphiques_comparatifs(dfs: dict, out_dir: Path) -> None:
 def main() -> None:
     print("=" * 60)
     print("ANALYSE DESCRIPTIVE - THERMO NILM")
+    print(f"Mode : {MODE}")
     print("=" * 60)
 
+    all_dfs   = charger_sources(MODE, FICHIERS_DESAGREGATION)
     all_stats = {}
-    all_dfs   = {}
 
-    for region, fichier in REGIONS.items():
-        print(f"\n── {region} ──")
+    for label, df in all_dfs.items():
+        print(f"\n── {label} ──")
 
-        # Chargement
-        df = charger_region(region, fichier)
-        if df.empty:
-            continue
-        all_dfs[region] = df
-
-        # Statistiques
-        stats = calculer_stats(df, region)
-        all_stats[region] = stats
+        stats = calculer_stats(df, label)
+        all_stats[label] = stats
 
         # Distribution des fréquences
-        df["intervalle"] = pd.cut(df["clim"], bins=BINS_PUISSANCE,
-                                   labels=LABELS_BINS, right=True)
-        freq_abs = df["intervalle"].value_counts().sort_index()
+        df_tmp = df.copy()
+        df_tmp["intervalle"] = pd.cut(df_tmp["clim"], bins=BINS_PUISSANCE,
+                                       labels=LABELS_BINS, right=True)
+        freq_abs = df_tmp["intervalle"].value_counts().sort_index()
         freq_rel = (freq_abs / freq_abs.sum() * 100).round(2)
         print(f"\n  Distribution des fréquences :")
         print(pd.DataFrame({
@@ -350,26 +240,24 @@ def main() -> None:
         }).to_string())
 
         # Graphiques individuels
-        out_region = BASE_DIR / "output" / "stats" / region.replace(" ", "_")
-        out_region.mkdir(parents=True, exist_ok=True)
-        print(f"\n  Graphiques → {out_region.name}/")
-        graphiques_region(df, region, out_region)
+        slug    = label.replace(" ", "_").replace("/", "-")
+        out_dir = BASE_DIR / "output" / "stats" / slug
+        out_dir.mkdir(parents=True, exist_ok=True)
+        print(f"\n  Graphiques → {out_dir.name}/")
+        graphiques_region(df, label, out_dir)
 
-    # Tableau comparatif toutes régions
     if all_stats:
         print("\n" + "=" * 60)
-        print("TABLEAU COMPARATIF - TOUTES RÉGIONS")
+        print("TABLEAU COMPARATIF")
         print("=" * 60)
         comparatif = pd.DataFrame(all_stats)
         print(comparatif.to_string())
 
-        # Sauvegarde CSV du comparatif
         out_csv = BASE_DIR / "output" / "stats" / "stats_comparatif.csv"
         out_csv.parent.mkdir(parents=True, exist_ok=True)
         comparatif.to_csv(out_csv)
         print(f"\n  Tableau sauvegardé : {out_csv.name}")
 
-    # Graphiques comparatifs
     if len(all_dfs) > 1:
         out_comp = BASE_DIR / "output" / "stats" / "comparatif"
         out_comp.mkdir(parents=True, exist_ok=True)
