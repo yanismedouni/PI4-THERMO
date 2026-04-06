@@ -87,14 +87,14 @@ def charger_region(nom_region: str, nom_fichier: str) -> pd.DataFrame:
         return pd.DataFrame()
 
     cols = ["dataid", "year", "month", "day", "hour", "minute",
-            "temp", "grid", "clim"]
+            "temp", "grid", "clim", "chauffage"]
 
     df = load_results_csv(str(csv_path), usecols=cols)
 
     try:
         _require_cols(df, cols)
     except ValueError as e:
-        print(f"   {nom_region} : {e} - région ignorée.")
+        print(f"    {nom_region} : {e} - région ignorée.")
         return pd.DataFrame()
 
     df["datetime"] = pd.to_datetime({
@@ -107,8 +107,10 @@ def charger_region(nom_region: str, nom_fichier: str) -> pd.DataFrame:
         print(f"   {nom_region} : {n_nat} horodatages invalides → exclus")
         df = df.dropna(subset=["datetime"])
 
-    df["clim"] = pd.to_numeric(df["clim"], errors="coerce").fillna(0)
-    df["grid"]  = pd.to_numeric(df["grid"],  errors="coerce")
+    for col in ["grid", "clim", "chauffage", "temp"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["clim"]      = df["clim"].fillna(0)
+    df["chauffage"] = df["chauffage"].fillna(0)
     df = df.dropna(subset=["grid"])
 
     if DATAID is not None:
