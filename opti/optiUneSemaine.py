@@ -456,7 +456,26 @@ def executer_client(
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
-
+# ─────────────────────────────────────────────────────────────────────────────
+# LISTE DE RUNS (dataid, date_debut)
+# ─────────────────────────────────────────────────────────────────────────────
+RUNS = [
+    (3864, "2015-08-01"),
+    (3938, "2016-08-01"),
+    (4495, "2018-08-01"),
+    (4934, "2015-08-01"),
+    (5938, "2016-08-01"),
+    (6377, "2014-08-01"),
+    (6547, "2015-08-01"),
+    (7062, "2014-08-01"),
+    (7114, "2015-08-01"),
+    (8061, "2016-08-01"),
+    (8342, "2018-08-01"),
+    (8574, "2014-08-01"),
+    (8733, "2014-08-01"),
+    (9213, "2014-08-01"),
+    (9612, "2014-08-01"),
+]
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Désagrégation MICQP — TCLs sur une semaine",
@@ -466,19 +485,18 @@ Exemples :
   python optiUneSemaine.py
   python optiUneSemaine.py --dataid 1642
   python optiUneSemaine.py --dataid 1642 --date 2015-08-10
-  python optiUneSemaine.py --dataid 1642 --max_time 480x
-  python optiUneSemaine.py --dataid 1642 --gap 0.01
-  python optiUneSemaine.py --dataid 1642 --max_time 600 --gap 0.01
-  python optiUneSemaine.py --nb_clients 3
+  python optiUneSemaine.py --max_time 480
+  python optiUneSemaine.py --gap 0.01
+  python optiUneSemaine.py --batch          ← nouveau : roule tous les RUNS
         """,
     )
     parser.add_argument("--dataid",     type=int,   default=None)
     parser.add_argument("--date",       type=str,   default=DATE_DEBUT_PAR_DEFAUT)
     parser.add_argument("--nb_clients", type=int,   default=NB_CLIENTS_PAR_DEFAUT)
-    parser.add_argument("--max_time",   type=float, default=MAX_TIME_DEFAUT,
-        help=f"Temps max MOSEK en secondes (défaut : {MAX_TIME_DEFAUT:.0f} s)")
-    parser.add_argument("--gap",        type=float, default=GAP_DEFAUT,
-        help=f"Gap relatif MOSEK entre 0 et 1 (défaut : {GAP_DEFAUT} = {GAP_DEFAUT*100:.0f}%%)")
+    parser.add_argument("--max_time",   type=float, default=MAX_TIME_DEFAUT)
+    parser.add_argument("--gap",        type=float, default=GAP_DEFAUT)
+    parser.add_argument("--batch",      action="store_true",
+        help="Roule tous les runs définis dans RUNS (ignore --dataid et --date)")
     args = parser.parse_args()
 
     print("=" * 70)
@@ -489,31 +507,57 @@ Exemples :
     print(f"  Temps max      : {args.max_time:.0f} s")
     print(f"  Gap cible      : {args.gap * 100:.1f} %")
 
-    print("\n[1] Chargement des données...")
-    semaines_clients = charger_semaine_clients(
-        date_debut=args.date,
-        nb_clients=args.nb_clients,
-        dataid=args.dataid,
-    )
+    # ── Construire la liste de runs ──────────────────────────────────────────
+    if args.batch:
+        runs = RUNS
+        print(f"\n  Mode batch : {len(runs)} run(s) planifiés")
+        for i, (did, d) in enumerate(runs, 1):
+            print(f"    {i:2d}. dataid={did}  date={d}")
+    else:
+        runs = [(args.dataid, args.date)]
+        print(f"\n  Mode individuel : dataid={args.dataid}  date={args.date}")
 
-    for item in semaines_clients:
+    # ── Boucle sur tous les runs ─────────────────────────────────────────────
+    n_ok, n_err = 0, 0
+
+    for run_idx, (dataid_run, date_run) in enumerate(runs, 1):
+        print(f"\n{'━' * 70}")
+        print(f"RUN {run_idx}/{len(runs)} — dataid={dataid_run}  date={date_run}")
+        print(f"{'━' * 70}")
+
         try:
-            executer_client(
-                dataid    =item["dataid"],
-                date_debut=item["date_debut"],
-                df_client =item["df"],
-                max_time  =args.max_time,
-                gap       =args.gap,
+            print("\n[1] Chargement des données...")
+            semaines = charger_semaine_clients(
+                date_debut=date_run,
+                nb_clients=1,
+                dataid=dataid_run,
             )
+
+            for item in semaines:
+                executer_client(
+                    dataid    =item["dataid"],
+                    date_debut=item["date_debut"],
+                    df_client =item["df"],
+                    max_time  =args.max_time,
+                    gap       =args.gap,
+                )
+            n_ok += 1
+
         except KeyboardInterrupt:
-            print(f"\n⚠️  Interruption — client {item['dataid']} abandonné.")
-            print("✔ Les clients précédents ont été sauvegardés dans output/")
+            print(f"\n⚠️  Interruption au run {run_idx} — arrêt du batch.")
+            print(f"✔ {n_ok} run(s) complétés, résultats dans output/")
             break
+        except Exception as e:
+            print(f"\n✗ Run {run_idx} échoué : {e}")
+            n_err += 1
+            continue  # passe au run suivant sans tout arrêter
 
     print("\n" + "=" * 70)
-    print("✔ Pipeline terminé.")
+    print(f"✔ Pipeline terminé — {n_ok} succès, {n_err} échec(s).")
     print("=" * 70)
 
-
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) == 1:          # aucun argument → force le mode batch
+        sys.argv.append("--batch")
     main()

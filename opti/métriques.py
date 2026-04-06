@@ -84,6 +84,13 @@ def calculer_metriques(csv_path: str, seuil_on: float = 0.05) -> dict:
           else float("nan"))
     fpr = fp / (fp + tn) if (fp + tn) > 0 else float("nan")
 
+    # ── Gap relatif MOSEK ─────────────────────────────────────────────
+    gap_reel = float("nan")
+    if "gap_reel" in df.columns:
+        vals = pd.to_numeric(df["gap_reel"], errors="coerce").dropna()
+        if not vals.empty:
+            gap_reel = float(vals.iloc[0])
+
     # ── Info sur le fichier ───────────────────────────────────────────
     # Extraire dataid et date depuis le nom du fichier
     # Format : resultats_desagregation_<dataid>_<date>_7jours.csv
@@ -113,6 +120,7 @@ def calculer_metriques(csv_path: str, seuil_on: float = 0.05) -> dict:
         "TN"            : tn,
         "FP"            : fp,
         "FN"            : fn,
+        "Gap réel (%)" : round(gap_reel * 100, 2) if not np.isnan(gap_reel) else float("nan"),
     }
 
 
@@ -144,7 +152,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     # ── Titre ─────────────────────────────────────────────────────────
-    n_cols = 16
+    n_cols = 17
     ws.merge_cells(f"A1:{get_column_letter(n_cols)}1")
     ws["A1"] = "THERMO — Métriques de désagrégation (Climatisation)"
     ws["A1"].font      = font_(bold=True, color=WHITE, size=13)
@@ -157,6 +165,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
         "Fichier CSV", "Client", "Date début", "N pas",
         "RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err",
         "Recall", "Precision", "F1", "FPR",
+        "Gap réel (%)",
         "TP", "TN", "FP", "FN",
     ]
     ws.row_dimensions[2].height = 32
@@ -172,6 +181,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
         "Fichier", "Client (dataid)", "Date début", "N pas",
         "RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err",
         "Recall", "Precision", "F1", "FPR",
+        "Gap réel (%)",
         "TP", "TN", "FP", "FN",
     ]
     for i, row_data in enumerate(resultats, start=3):
@@ -208,7 +218,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
             cell.alignment = center
 
     # ── Largeurs colonnes ─────────────────────────────────────────────
-    col_widths = [42, 10, 12, 8, 10, 10, 12, 10, 10, 11, 10, 10, 7, 7, 7, 7]
+    col_widths = [42, 10, 12, 8, 10, 10, 12, 10, 10, 11, 10, 10, 12, 7, 7, 7, 7]
     for i, w in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
@@ -289,13 +299,13 @@ Exemples :
     df_res = pd.DataFrame(resultats)[[
         "Client (dataid)", "Date début",
         "RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err",
-        "Recall", "F1", "FPR",
+        "Recall", "F1", "FPR", "Gap réel (%)",   # ← ajouter
     ]]
     print(df_res.to_string(index=False))
 
     # ── Moyennes ──────────────────────────────────────────────────────
     print("\n  Moyennes :")
-    for col in ["RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err", "Recall", "F1", "FPR"]:
+    for col in ["RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err", "Recall", "F1", "FPR", "Gap réel (%)"]:
         vals = pd.to_numeric(df_res[col], errors="coerce").dropna()
         if len(vals) > 0:
             print(f"    {col:<15} : {vals.mean():.4f}")

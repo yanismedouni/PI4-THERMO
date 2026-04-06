@@ -266,7 +266,7 @@ def resoudre_optimisation(modele, verbose=False):
             solver=cp.MOSEK,
             verbose=verbose,
             mosek_params={
-                'MSK_DPAR_MIO_TOL_REL_GAP': 0.25,  # 5% gap acceptable
+                'MSK_DPAR_MIO_TOL_REL_GAP': 0.70,  # 5% gap acceptable
                 
             }
         )

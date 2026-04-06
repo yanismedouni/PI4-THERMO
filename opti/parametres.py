@@ -90,7 +90,7 @@ def obtenir_parametres_defaut():
         'thermique': {
             'climatisation': {
                 'mode':      'climatisation',
-                'T_ext_MIN': 23.0,
+                'T_ext_MIN': 21.0,
                 'T_ext_MAX': 45.0, 
             },
             'chauffage': {
@@ -106,7 +106,7 @@ def obtenir_parametres_defaut():
         'duty_cycle': {
             'climatisation': {
                 'x_DUTY':       4.0,
-                'x_DUTY_prime': 4.0,
+                'x_DUTY_prime': 3.0,
             },
             'chauffage': {
                 'x_DUTY':       4.0,
