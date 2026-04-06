@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import seaborn as sns
 from pathlib import Path
 
@@ -79,6 +78,13 @@ def extraire_runs(df: pd.DataFrame) -> pd.DataFrame:
 # STATISTIQUES DE TRANSITIONS
 # ══════════════════════════════════════════════════════════════════════
 
+def _duty_cycle_saison(df: pd.DataFrame, saison: str) -> float:
+    """Duty cycle (% temps ON) pour une saison donnée."""
+    mask = df["saison"] == saison
+    if mask.sum() == 0:
+        return float("nan")
+    return (df.loc[mask, "clim"] > SEUIL_ON).mean() * 100
+
 def calculer_stats_transitions(
     df: pd.DataFrame,
     runs: pd.DataFrame,
@@ -112,6 +118,12 @@ def calculer_stats_transitions(
         "Durée OFF - max observée (min)": runs_off["duree_min"].max(),
         "Durée OFF - écart-type (min)"  : runs_off["duree_min"].std(),
         "% cycles ON < 30 min"          : pct_cycles_courts,
+        # Duty cycle
+        "Duty cycle global (%)"         : (df["clim"] > SEUIL_ON).mean() * 100,
+        "Duty cycle - Hiver (%)"        : _duty_cycle_saison(df, "Hiver"),
+        "Duty cycle - Printemps (%)"    : _duty_cycle_saison(df, "Printemps"),
+        "Duty cycle - Été (%)"          : _duty_cycle_saison(df, "Été"),
+        "Duty cycle - Automne (%)"      : _duty_cycle_saison(df, "Automne"),
     }, name=label).round(3)
 
 
@@ -202,55 +214,42 @@ def graphiques_transitions(
     plt.tight_layout()
     _save(fig, out_dir, "T4_demarrages_par_heure.png")
 
-    # T5 - Série temporelle d'une semaine type
-    ete = df[df["saison"] == "Été"]
-    if ete.empty:
-        ete = df
-
-    cycles_ete = (
-        runs_on[runs_on["saison"] == "Été"]
-        .groupby(runs_on["debut"].dt.isocalendar().week)
-        .size()
-    ) if not runs_on[runs_on["saison"] == "Été"].empty else pd.Series()
-
-    if not cycles_ete.empty:
-        semaine_cible = cycles_ete.idxmax()
-        mask          = ete.index.isocalendar().week == semaine_cible
-        semaine_df    = ete[mask].iloc[:672]
-    else:
-        semaine_df = df.iloc[:672]
-
-    fig, axes = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
-
-    ax1 = axes[0]
-    ax1.plot(semaine_df.index, semaine_df["clim"],
-             color=PALETTE["dark"], lw=1, alpha=0.8, label="Puissance (kW)")
-    ax1.axhline(SEUIL_ON, color="red", ls=":", lw=1,
-                label=f"Seuil ON = {SEUIL_ON} kW")
-    on_mask = semaine_df["clim"] > SEUIL_ON
-    ax1.fill_between(semaine_df.index, 0, semaine_df["clim"],
-                     where=on_mask, alpha=0.25,
-                     color=PALETTE["on"], label="État ON")
-    ax1.set_ylabel("Puissance (kW)")
-    ax1.set_title(f"Série temporelle - Semaine type été ({label})")
-    ax1.legend(fontsize=9, loc="upper right")
-
-    ax2 = axes[1]
-    ax2.fill_between(semaine_df.index,
-                     (semaine_df["clim"] > SEUIL_ON).astype(int),
-                     step="post", color=PALETTE["on"], alpha=0.7, label="ON")
-    ax2.fill_between(semaine_df.index,
-                     (semaine_df["clim"] <= SEUIL_ON).astype(int),
-                     step="post", color=PALETTE["off"], alpha=0.3, label="OFF")
-    ax2.set_ylabel("État (1=ON, 0=OFF)")
-    ax2.set_xlabel("Date / Heure")
-    ax2.set_yticks([0, 1])
-    patch_on  = mpatches.Patch(color=PALETTE["on"],  alpha=0.7, label="ON")
-    patch_off = mpatches.Patch(color=PALETTE["off"], alpha=0.3, label="OFF")
-    ax2.legend(handles=[patch_on, patch_off], fontsize=9, loc="upper right")
-
+    # T5 - Duty cycle journalier par saison (boxplot)
+    duty_jour = (
+        df.groupby(["saison", "date"])["clim"]
+        .apply(lambda x: (x > SEUIL_ON).mean() * 100)
+        .reset_index(name="duty_cycle")
+    )
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.boxplot(data=duty_jour, x="saison", y="duty_cycle",
+                order=ORDRE_SAISONS, color=couleur, ax=ax)
+    ax.set_xlabel("Saison")
+    ax.set_ylabel("Duty cycle journalier (%)")
+    ax.set_title(f"Duty cycle journalier par saison ({label})")
+    ax.axhline(duty_jour["duty_cycle"].mean(), color="red", ls="--", lw=1.2,
+               label=f"Moyenne globale = {duty_jour['duty_cycle'].mean():.1f}%")
+    ax.legend(fontsize=9)
     plt.tight_layout()
-    _save(fig, out_dir, "T5_serie_temporelle_semaine.png")
+    _save(fig, out_dir, "T5_duty_cycle_saison.png")
+
+    # T6 - Profil horaire du duty cycle
+    duty_heure = (
+        df.groupby("hour")["clim"]
+        .apply(lambda x: (x > SEUIL_ON).mean() * 100)
+        .reindex(range(24), fill_value=0)
+    )
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.bar(duty_heure.index, duty_heure.values,
+           color=couleur, edgecolor="white", alpha=0.85)
+    ax.set_xlabel("Heure de la journée")
+    ax.set_ylabel("Duty cycle (%)")
+    ax.set_title(f"Profil horaire du duty cycle ({label})")
+    ax.set_xticks(range(0, 24))
+    ax.axhline(duty_heure.mean(), color="red", ls="--", lw=1.2,
+               label=f"Moyenne = {duty_heure.mean():.1f}%")
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    _save(fig, out_dir, "T6_duty_cycle_horaire.png")
 
 
 # ══════════════════════════════════════════════════════════════════════

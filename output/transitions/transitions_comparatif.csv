@@ -1,16 +1,20 @@
-,Austin,California,New York
-Transitions totales,100305.0,37818.0,14525.0
-Cycles (démarrages OFF→ON),50153.0,18910.0,7265.0
-Cycles / jour (moyenne),137.03,12.94,39.27
-Durée ON - moyenne (min),78.198,47.964,95.562
-Durée ON - médiane (min),30.0,30.0,30.0
-Durée ON - min observée (min),15.0,15.0,15.0
-Durée ON - max observée (min),5430.0,2745.0,43515.0
-Durée ON - écart-type (min),185.48,71.75,790.907
-Durée OFF - moyenne (min),182.901,590.348,813.964
-Durée OFF - médiane (min),15.0,30.0,30.0
-Durée OFF - min observée (min),15.0,15.0,15.0
-Durée OFF - max observée (min),525540.0,388275.0,264960.0
-Durée OFF - écart-type (min),3544.799,7281.67,12176.61
-Duty cycle global (%),29.939,7.506,10.481
-% cycles ON < 30 min,33.362,35.42,29.814
+,Désagrégation
+Transitions totales,1465.0
+Cycles (démarrages OFF→ON),735.0
+Cycles / jour (moyenne),52.5
+Durée ON - moyenne (min),92.592
+Durée ON - médiane (min),30.0
+Durée ON - min observée (min),15.0
+Durée ON - max observée (min),5940.0
+Durée ON - écart-type (min),292.355
+Durée OFF - moyenne (min),524.702
+Durée OFF - médiane (min),30.0
+Durée OFF - min observée (min),15.0
+Durée OFF - max observée (min),20160.0
+Durée OFF - écart-type (min),2608.904
+% cycles ON < 30 min,43.537
+Duty cycle global (%),14.677
+Duty cycle - Hiver (%),
+Duty cycle - Printemps (%),
+Duty cycle - Été (%),14.677
+Duty cycle - Automne (%),
