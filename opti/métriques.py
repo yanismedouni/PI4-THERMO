@@ -189,7 +189,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
         ws.row_dimensions[i].height = 18
 
         for col_idx, key in enumerate(keys, start=1):
-            val  = row_data.get(key, "")
+            val = _cel(row_data.get(key, "—"))
             cell = ws.cell(row=i, column=col_idx, value=val)
             cell.fill      = fill(shade)
             cell.border    = border
@@ -207,11 +207,11 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
         ws.cell(row=row_moy, column=1).border    = border
 
         for col_idx, key in enumerate(keys[1:], start=2):
-            vals = [r[key] for r in resultats
-                    if isinstance(r.get(key), (int, float))
-                    and not np.isnan(float(r[key]))]
+            vals = [float(r[key]) for r in resultats
+                    if isinstance(r.get(key), (int, float, np.floating))
+                    and not (r[key] != r[key])]   # NaN check universel
             val  = round(float(np.mean(vals)), 4) if vals else "—"
-            cell = ws.cell(row=row_moy, column=col_idx, value=val)
+            cell = ws.cell(row=row_moy, column=col_idx, value=_cel(val))
             cell.fill      = fill(BLUE_LIGHT)
             cell.border    = border
             cell.font      = font_(bold=True, size=10)
@@ -246,7 +246,8 @@ def evaluer_periode(
       - metriques_par_saison: dict {saison: métriques} si par_saison=True
       - metriques_par_mois  : dict {mois: métriques}  si par_mois=True
     """
-    df = pd.read_csv(csv_path, parse_dates=["timestamp"])
+    df = pd.read_csv(csv_path)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed", errors="coerce")
 
     colonnes_requises = [COL_REEL, COL_ESTIME, COL_ON_PRED, "timestamp"]
     manquantes = [c for c in colonnes_requises if c not in df.columns]
@@ -368,97 +369,213 @@ def afficher_evaluation_periode(resultats: dict) -> None:
         print(df_m.to_string())
 
 
-def sauvegarder_excel_periode(resultats: dict, out_path: str) -> None:
+def _cel(val) -> object:
+    """Convertit toute valeur non-écrivable par openpyxl en '—'.
+    Traite Python float nan, np.float64 nan, np.float32, inf, None, etc.
     """
-    Génère un rapport Excel multi-onglets pour une évaluation de période.
-    Onglets : Globale | Par saison | Par mois
+    if val is None:
+        return "—"
+    if isinstance(val, str):
+        return val
+    # Convertir les scalaires numpy en types Python natifs
+    if hasattr(val, "item"):
+        val = val.item()
+    # Maintenant val est un type Python natif (int, float, bool…)
+    if isinstance(val, float) and (val != val or val == float("inf") or val == float("-inf")):
+        return "—"
+    return val
+
+
+def sauvegarder_excel_periode(resultats: dict, out_path: str) -> None:
+    """Alias conservé pour compatibilité — délègue à sauvegarder_excel_tous_clients."""
+    sauvegarder_excel_tous_clients([resultats], out_path)
+
+
+def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) -> None:
+    """
+    Génère un rapport Excel unique regroupant tous les clients.
+
+    Onglets produits :
+      • « Résumé »           — une ligne par client (métriques globales) + ligne de moyennes
+      • « [dataid]_[annee] » — pour chaque client : global, par saison, par mois
     """
     wb = Workbook()
 
+    # ── Palette & helpers ─────────────────────────────────────────────
     BLUE_DARK  = "1F3864"
     BLUE_MID   = "2E75B6"
     BLUE_LIGHT = "D6E4F0"
+    TEAL_DARK  = "1B6B5A"
+    TEAL_MID   = "2E8B6F"
     WHITE      = "FFFFFF"
     GREY       = "F2F2F2"
 
-    def fill(c):   return PatternFill("solid", start_color=c)
+    def fill(c):
+        return PatternFill("solid", start_color=c)
     def font_(bold=False, color="000000", size=10):
         return Font(name="Arial", bold=bold, color=color, size=size)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
     thin   = Side(style="thin", color="BBBBBB")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    COLS_AFFICHAGE = [
+    COLS_DETAIL = [
         "N pas", "RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err",
         "Recall", "Precision", "F1", "FPR", "TP", "TN", "FP", "FN",
     ]
 
-    def _ecrire_onglet(ws, titre: str, donnees: dict) -> None:
-        """Écrit un onglet avec une ligne de titre + en-têtes + données."""
-        n_cols = 1 + len(COLS_AFFICHAGE)
+    # ── Onglet Résumé ─────────────────────────────────────────────────
+    ws_res = wb.active
+    ws_res.title = "Résumé"
+    ws_res.sheet_view.showGridLines = False
 
-        ws.merge_cells(f"A1:{get_column_letter(n_cols)}1")
-        ws["A1"] = titre
-        ws["A1"].font      = font_(bold=True, color=WHITE, size=12)
-        ws["A1"].fill      = fill(BLUE_DARK)
-        ws["A1"].alignment = center
-        ws.row_dimensions[1].height = 24
+    COLS_RESUME = [
+        "Client", "Période", "Année", "N pas",
+        "RMSE (kW)", "MAE (kW)", "Energy Frac", "Norm Err",
+        "Recall", "Precision", "F1", "FPR",
+        "TP", "TN", "FP", "FN",
+    ]
+    n_cols_res = len(COLS_RESUME)
 
-        en_tetes = ["Groupe"] + COLS_AFFICHAGE
+    # Titre
+    ws_res.merge_cells(f"A1:{get_column_letter(n_cols_res)}1")
+    ws_res["A1"] = "THERMO — Récapitulatif des métriques (tous clients)"
+    ws_res["A1"].font      = font_(bold=True, color=WHITE, size=13)
+    ws_res["A1"].fill      = fill(BLUE_DARK)
+    ws_res["A1"].alignment = center
+    ws_res.row_dimensions[1].height = 28
+
+    # En-têtes
+    ws_res.row_dimensions[2].height = 32
+    for col_idx, h in enumerate(COLS_RESUME, start=1):
+        c = ws_res.cell(row=2, column=col_idx, value=h)
+        c.font      = font_(bold=True, color=WHITE, size=10)
+        c.fill      = fill(BLUE_MID)
+        c.alignment = center
+        c.border    = border
+
+    # Données — une ligne par client
+    accumulated = {col: [] for col in COLS_RESUME[3:]}
+    for i, res in enumerate(tous_resultats, start=3):
+        g     = res["metriques_globales"]
+        shade = GREY if i % 2 == 0 else WHITE
+        ws_res.row_dimensions[i].height = 18
+        row_vals = [
+            res["dataid"], res["periode"].upper(), res["annee"],
+            g.get("N pas", "—"),
+            g.get("RMSE (kW)", "—"), g.get("MAE (kW)", "—"),
+            g.get("Energy Frac", "—"), g.get("Norm Err", "—"),
+            g.get("Recall", "—"), g.get("Precision", "—"),
+            g.get("F1", "—"), g.get("FPR", "—"),
+            g.get("TP", "—"), g.get("TN", "—"),
+            g.get("FP", "—"), g.get("FN", "—"),
+        ]
+        for col_idx, val in enumerate(row_vals, start=1):
+            c = ws_res.cell(row=i, column=col_idx, value=_cel(val))
+            c.fill      = fill(shade)
+            c.border    = border
+            c.font      = font_(size=10)
+            c.alignment = left if col_idx == 1 else center
+        for col_name, val in zip(COLS_RESUME[3:], row_vals[3:]):
+            if isinstance(val, (int, float)) and not (val != val):
+                accumulated[col_name].append(float(val))
+
+    # Ligne de moyennes
+    row_moy = len(tous_resultats) + 3
+    ws_res.row_dimensions[row_moy].height = 20
+    ws_res.merge_cells(f"A{row_moy}:C{row_moy}")
+    ws_res.cell(row=row_moy, column=1, value="MOYENNE").font      = font_(bold=True, color=WHITE, size=10)
+    ws_res.cell(row=row_moy, column=1).fill      = fill(BLUE_DARK)
+    ws_res.cell(row=row_moy, column=1).alignment = center
+    ws_res.cell(row=row_moy, column=1).border    = border
+    for col_idx, col_name in enumerate(COLS_RESUME[3:], start=4):
+        vals = accumulated[col_name]
+        val  = round(float(np.mean(vals)), 4) if vals else "—"
+        c = ws_res.cell(row=row_moy, column=col_idx, value=_cel(val))
+        c.fill      = fill(BLUE_LIGHT)
+        c.border    = border
+        c.font      = font_(bold=True, size=10)
+        c.alignment = center
+
+    col_widths_res = [12, 10, 8, 8] + [11] * (n_cols_res - 4)
+    for i, w in enumerate(col_widths_res, start=1):
+        ws_res.column_dimensions[get_column_letter(i)].width = w
+    ws_res.freeze_panes = "A3"
+
+    # ── Onglets détaillés — un par client ─────────────────────────────
+    def _ecrire_section(ws, row_start: int, titre_section: str,
+                        couleur_titre: str, donnees: dict) -> int:
+        """Écrit un bloc titre+en-têtes+lignes. Retourne la prochaine ligne libre."""
+        n_cols = 1 + len(COLS_DETAIL)
+        ws.merge_cells(f"A{row_start}:{get_column_letter(n_cols)}{row_start}")
+        ws.cell(row=row_start, column=1, value=titre_section).font      = font_(bold=True, color=WHITE, size=11)
+        ws.cell(row=row_start, column=1).fill      = fill(couleur_titre)
+        ws.cell(row=row_start, column=1).alignment = center
+        ws.row_dimensions[row_start].height = 22
+        row_start += 1
+
+        en_tetes = ["Groupe"] + COLS_DETAIL
         for col_idx, h in enumerate(en_tetes, start=1):
-            c           = ws.cell(row=2, column=col_idx, value=h)
+            c = ws.cell(row=row_start, column=col_idx, value=h)
             c.font      = font_(bold=True, color=WHITE, size=10)
             c.fill      = fill(BLUE_MID)
             c.alignment = center
             c.border    = border
-        ws.row_dimensions[2].height = 28
+        ws.row_dimensions[row_start].height = 26
+        row_start += 1
 
-        for i, (label, metriques) in enumerate(donnees.items(), start=3):
-            shade = GREY if i % 2 == 0 else WHITE
-            ws.row_dimensions[i].height = 18
-            ws.cell(row=i, column=1, value=label).font      = font_(bold=True, size=10)
-            ws.cell(row=i, column=1).fill      = fill(shade)
-            ws.cell(row=i, column=1).alignment = center
-            ws.cell(row=i, column=1).border    = border
-            for col_idx, col in enumerate(COLS_AFFICHAGE, start=2):
-                val  = metriques.get(col, "—")
-                c    = ws.cell(row=i, column=col_idx, value=val)
+        for j, (label, metriques) in enumerate(donnees.items()):
+            shade = GREY if j % 2 == 0 else WHITE
+            ws.row_dimensions[row_start].height = 18
+            ws.cell(row=row_start, column=1, value=label).font      = font_(bold=True, size=10)
+            ws.cell(row=row_start, column=1).fill      = fill(shade)
+            ws.cell(row=row_start, column=1).alignment = center
+            ws.cell(row=row_start, column=1).border    = border
+            for col_idx, col in enumerate(COLS_DETAIL, start=2):
+                c = ws.cell(row=row_start, column=col_idx,
+                            value=_cel(metriques.get(col, "—")))
                 c.fill      = fill(shade)
                 c.border    = border
                 c.font      = font_(size=10)
                 c.alignment = center
+            row_start += 1
 
-        for col_idx, w in enumerate([18] + [12] * len(COLS_AFFICHAGE), start=1):
+        return row_start + 1   # ligne vide de séparation
+
+    for res in tous_resultats:
+        onglet_nom = f"{res['dataid']}_{res['annee']}"[:31]
+        ws = wb.create_sheet(onglet_nom)
+        ws.sheet_view.showGridLines = False
+
+        n_cols = 1 + len(COLS_DETAIL)
+        ws.merge_cells(f"A1:{get_column_letter(n_cols)}1")
+        ws["A1"] = (f"Client {res['dataid']} — "
+                    f"{res['periode'].upper()} {res['annee']}")
+        ws["A1"].font      = font_(bold=True, color=WHITE, size=13)
+        ws["A1"].fill      = fill(BLUE_DARK)
+        ws["A1"].alignment = center
+        ws.row_dimensions[1].height = 28
+
+        next_row = 3
+
+        next_row = _ecrire_section(
+            ws, next_row,
+            f"Métriques globales ({res['metriques_globales'].get('N pas', '?')}{chr(160)}pas)",
+            BLUE_MID,
+            {"Global": res["metriques_globales"]},
+        )
+
+        if res.get("metriques_par_saison"):
+            next_row = _ecrire_section(
+                ws, next_row, "Par saison", TEAL_MID, res["metriques_par_saison"])
+
+        if res.get("metriques_par_mois"):
+            next_row = _ecrire_section(
+                ws, next_row, "Par mois", TEAL_DARK, res["metriques_par_mois"])
+
+        for col_idx, w in enumerate([18] + [12] * len(COLS_DETAIL), start=1):
             ws.column_dimensions[get_column_letter(col_idx)].width = w
         ws.freeze_panes = "A3"
-
-    # Onglet 1 — Globale
-    ws_global = wb.active
-    ws_global.title = "Globale"
-    _ecrire_onglet(
-        ws_global,
-        f"Métriques globales — Client {resultats['dataid']} "
-        f"({resultats['periode'].upper()} {resultats['annee']})",
-        {"Global": resultats["metriques_globales"]},
-    )
-
-    # Onglet 2 — Par saison
-    if "metriques_par_saison" in resultats:
-        ws_s = wb.create_sheet("Par saison")
-        _ecrire_onglet(
-            ws_s,
-            f"Métriques par saison — Client {resultats['dataid']}",
-            resultats["metriques_par_saison"],
-        )
-
-    # Onglet 3 — Par mois
-    if "metriques_par_mois" in resultats:
-        ws_m = wb.create_sheet("Par mois")
-        _ecrire_onglet(
-            ws_m,
-            f"Métriques par mois — Client {resultats['dataid']}",
-            resultats["metriques_par_mois"],
-        )
 
     wb.save(out_path)
 
@@ -524,20 +641,24 @@ Exemples :
 
         print(f"\n  {len(csv_complets)} fichier(s) complet(s) trouvé(s)\n")
 
+        tous_resultats = []
         for csv_path in csv_complets:
             print(f"  {Path(csv_path).name}")
             try:
                 res = evaluer_periode(csv_path, seuil_on=args.seuil_on)
                 afficher_evaluation_periode(res)
-
-                rapport_xlsx = str(
-                    Path(args.rapport).parent
-                    / f"metriques_{res['dataid']}_{res['periode']}_{res['annee']}.xlsx"
-                )
-                sauvegarder_excel_periode(res, rapport_xlsx)
-                print(f"  ✔ Rapport sauvegardé : {Path(rapport_xlsx).name}")
+                tous_resultats.append(res)
+                print(f"  ✔ OK — Client {res['dataid']} ({res['periode'].upper()} {res['annee']})")
             except Exception as e:
                 print(f"  ✗ Erreur : {e}")
+
+        if not tous_resultats:
+            print("\n⚠️  Aucun résultat valide — rapport non généré.")
+            return
+
+        sauvegarder_excel_tous_clients(tous_resultats, args.rapport)
+        print(f"\n✔ Rapport unique sauvegardé : {args.rapport}")
+        print(f"   Onglets : Résumé + {len(tous_resultats)} client(s)")
         return
 
     # ── Mode hebdomadaire : fichiers resultats_desagregation_*.csv ───────
