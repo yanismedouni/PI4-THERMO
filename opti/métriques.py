@@ -100,8 +100,8 @@ def calculer_metriques(csv_path: str, seuil_on: float = 0.05) -> dict:
         dataid     = parties[2]
         date_debut = parties[3]
     except IndexError:
-        dataid     = "—"
-        date_debut = "—"
+        dataid     = "-"
+        date_debut = "-"
 
     return {
         "Fichier"       : Path(csv_path).name,
@@ -154,7 +154,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
     # ── Titre ─────────────────────────────────────────────────────────
     n_cols = 17
     ws.merge_cells(f"A1:{get_column_letter(n_cols)}1")
-    ws["A1"] = "THERMO — Métriques de désagrégation (Climatisation)"
+    ws["A1"] = "THERMO - Métriques de désagrégation (Climatisation)"
     ws["A1"].font      = font_(bold=True, color=WHITE, size=13)
     ws["A1"].fill      = fill(BLUE_DARK)
     ws["A1"].alignment = center
@@ -189,7 +189,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
         ws.row_dimensions[i].height = 18
 
         for col_idx, key in enumerate(keys, start=1):
-            val = _cel(row_data.get(key, "—"))
+            val = _cel(row_data.get(key, "-"))
             cell = ws.cell(row=i, column=col_idx, value=val)
             cell.fill      = fill(shade)
             cell.border    = border
@@ -210,7 +210,7 @@ def sauvegarder_excel(resultats: list[dict], out_path: str) -> None:
             vals = [float(r[key]) for r in resultats
                     if isinstance(r.get(key), (int, float, np.floating))
                     and not (r[key] != r[key])]   # NaN check universel
-            val  = round(float(np.mean(vals)), 4) if vals else "—"
+            val  = round(float(np.mean(vals)), 4) if vals else "-"
             cell = ws.cell(row=row_moy, column=col_idx, value=_cel(val))
             cell.fill      = fill(BLUE_LIGHT)
             cell.border    = border
@@ -272,7 +272,7 @@ def evaluer_periode(
         periode = parties[2]
         annee   = parties[3]
     except IndexError:
-        dataid, periode, annee = "—", "—", "—"
+        dataid, periode, annee = "-", "-", "-"
 
     def _metriques_df(sous_df: pd.DataFrame) -> dict:
         """Calcule les métriques sur un sous-ensemble du DataFrame."""
@@ -344,7 +344,7 @@ def afficher_evaluation_periode(resultats: dict) -> None:
     """Affiche les métriques d'une évaluation de période de façon lisible."""
 
     print(f"\n{'=' * 65}")
-    print(f"ÉVALUATION — Client {resultats['dataid']}  |  "
+    print(f"ÉVALUATION - Client {resultats['dataid']}  |  "
           f"{resultats['periode'].upper()} {resultats['annee']}")
     print(f"{'=' * 65}")
 
@@ -370,11 +370,11 @@ def afficher_evaluation_periode(resultats: dict) -> None:
 
 
 def _cel(val) -> object:
-    """Convertit toute valeur non-écrivable par openpyxl en '—'.
+    """Convertit toute valeur non-écrivable par openpyxl en '-'.
     Traite Python float nan, np.float64 nan, np.float32, inf, None, etc.
     """
     if val is None:
-        return "—"
+        return "-"
     if isinstance(val, str):
         return val
     # Convertir les scalaires numpy en types Python natifs
@@ -382,12 +382,12 @@ def _cel(val) -> object:
         val = val.item()
     # Maintenant val est un type Python natif (int, float, bool…)
     if isinstance(val, float) and (val != val or val == float("inf") or val == float("-inf")):
-        return "—"
+        return "-"
     return val
 
 
 def sauvegarder_excel_periode(resultats: dict, out_path: str) -> None:
-    """Alias conservé pour compatibilité — délègue à sauvegarder_excel_tous_clients."""
+    """Alias conservé pour compatibilité - délègue à sauvegarder_excel_tous_clients."""
     sauvegarder_excel_tous_clients([resultats], out_path)
 
 
@@ -396,8 +396,8 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
     Génère un rapport Excel unique regroupant tous les clients.
 
     Onglets produits :
-      • « Résumé »           — une ligne par client (métriques globales) + ligne de moyennes
-      • « [dataid]_[annee] » — pour chaque client : global, par saison, par mois
+      • « Résumé »           - une ligne par client (métriques globales) + ligne de moyennes
+      • « [dataid]_[annee] » - pour chaque client : global, par saison, par mois
     """
     wb = Workbook()
 
@@ -439,7 +439,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
 
     # Titre
     ws_res.merge_cells(f"A1:{get_column_letter(n_cols_res)}1")
-    ws_res["A1"] = "THERMO — Récapitulatif des métriques (tous clients)"
+    ws_res["A1"] = "THERMO - Récapitulatif des métriques (tous clients)"
     ws_res["A1"].font      = font_(bold=True, color=WHITE, size=13)
     ws_res["A1"].fill      = fill(BLUE_DARK)
     ws_res["A1"].alignment = center
@@ -454,7 +454,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
         c.alignment = center
         c.border    = border
 
-    # Données — une ligne par client
+    # Données - une ligne par client
     accumulated = {col: [] for col in COLS_RESUME[3:]}
     for i, res in enumerate(tous_resultats, start=3):
         g     = res["metriques_globales"]
@@ -462,13 +462,13 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
         ws_res.row_dimensions[i].height = 18
         row_vals = [
             res["dataid"], res["periode"].upper(), res["annee"],
-            g.get("N pas", "—"),
-            g.get("RMSE (kW)", "—"), g.get("MAE (kW)", "—"),
-            g.get("Energy Frac", "—"), g.get("Norm Err", "—"),
-            g.get("Recall", "—"), g.get("Precision", "—"),
-            g.get("F1", "—"), g.get("FPR", "—"),
-            g.get("TP", "—"), g.get("TN", "—"),
-            g.get("FP", "—"), g.get("FN", "—"),
+            g.get("N pas", "-"),
+            g.get("RMSE (kW)", "-"), g.get("MAE (kW)", "-"),
+            g.get("Energy Frac", "-"), g.get("Norm Err", "-"),
+            g.get("Recall", "-"), g.get("Precision", "-"),
+            g.get("F1", "-"), g.get("FPR", "-"),
+            g.get("TP", "-"), g.get("TN", "-"),
+            g.get("FP", "-"), g.get("FN", "-"),
         ]
         for col_idx, val in enumerate(row_vals, start=1):
             c = ws_res.cell(row=i, column=col_idx, value=_cel(val))
@@ -490,7 +490,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
     ws_res.cell(row=row_moy, column=1).border    = border
     for col_idx, col_name in enumerate(COLS_RESUME[3:], start=4):
         vals = accumulated[col_name]
-        val  = round(float(np.mean(vals)), 4) if vals else "—"
+        val  = round(float(np.mean(vals)), 4) if vals else "-"
         c = ws_res.cell(row=row_moy, column=col_idx, value=_cel(val))
         c.fill      = fill(BLUE_LIGHT)
         c.border    = border
@@ -502,7 +502,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
         ws_res.column_dimensions[get_column_letter(i)].width = w
     ws_res.freeze_panes = "A3"
 
-    # ── Onglets détaillés — un par client ─────────────────────────────
+    # ── Onglets détaillés - un par client ─────────────────────────────
     def _ecrire_section(ws, row_start: int, titre_section: str,
                         couleur_titre: str, donnees: dict) -> int:
         """Écrit un bloc titre+en-têtes+lignes. Retourne la prochaine ligne libre."""
@@ -533,7 +533,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
             ws.cell(row=row_start, column=1).border    = border
             for col_idx, col in enumerate(COLS_DETAIL, start=2):
                 c = ws.cell(row=row_start, column=col_idx,
-                            value=_cel(metriques.get(col, "—")))
+                            value=_cel(metriques.get(col, "-")))
                 c.fill      = fill(shade)
                 c.border    = border
                 c.font      = font_(size=10)
@@ -549,7 +549,7 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
 
         n_cols = 1 + len(COLS_DETAIL)
         ws.merge_cells(f"A1:{get_column_letter(n_cols)}1")
-        ws["A1"] = (f"Client {res['dataid']} — "
+        ws["A1"] = (f"Client {res['dataid']} - "
                     f"{res['periode'].upper()} {res['annee']}")
         ws["A1"].font      = font_(bold=True, color=WHITE, size=13)
         ws["A1"].fill      = fill(BLUE_DARK)
@@ -576,6 +576,68 @@ def sauvegarder_excel_tous_clients(tous_resultats: list[dict], out_path: str) ->
         for col_idx, w in enumerate([18] + [12] * len(COLS_DETAIL), start=1):
             ws.column_dimensions[get_column_letter(col_idx)].width = w
         ws.freeze_panes = "A3"
+
+    # ── Sections agrégées dans l'onglet Résumé ───────────────────────
+    # Ajout d'un bandeau séparateur sous le tableau des clients
+    sep_row = len(tous_resultats) + 5
+    ws_res.row_dimensions[sep_row - 1].height = 10   # espace visuel
+
+    def _moyennes_groupe(groupe: str, cle: str) -> dict:
+        """
+        Calcule la moyenne de chaque métrique numérique pour un groupe
+        (saison ou mois) donné, sur tous les clients qui ont cette clé.
+        """
+        accumul = {col: [] for col in COLS_DETAIL}
+        for res in tous_resultats:
+            sous = res.get(cle, {}).get(groupe, {})
+            for col in COLS_DETAIL:
+                v = sous.get(col)
+                if isinstance(v, (int, float)) and not (v != v):
+                    accumul[col].append(float(v))
+        return {
+            col: (round(float(np.mean(vals)), 4) if vals else float("nan"))
+            for col, vals in accumul.items()
+        }
+
+    # ── Par saison (moyenne tous clients) ────────────────────────────
+    saisons_presentes = []
+    for s in ["Hiver", "Printemps", "Été", "Automne"]:
+        if any(s in res.get("metriques_par_saison", {}) for res in tous_resultats):
+            saisons_presentes.append(s)
+
+    if saisons_presentes:
+        moy_saisons = {s: _moyennes_groupe(s, "metriques_par_saison")
+                       for s in saisons_presentes}
+        sep_row = _ecrire_section(
+            ws_res, sep_row,
+            f"Moyenne tous clients - Par saison  ({len(tous_resultats)} clients)",
+            TEAL_MID,
+            moy_saisons,
+        )
+
+    # ── Par mois (moyenne tous clients) ──────────────────────────────
+    noms_mois_ordre = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun",
+                       "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc"]
+    mois_presents = [m for m in noms_mois_ordre
+                     if any(m in res.get("metriques_par_mois", {})
+                            for res in tous_resultats)]
+
+    if mois_presents:
+        moy_mois = {m: _moyennes_groupe(m, "metriques_par_mois")
+                    for m in mois_presents}
+        _ecrire_section(
+            ws_res, sep_row,
+            f"Moyenne tous clients - Par mois  ({len(tous_resultats)} clients)",
+            TEAL_DARK,
+            moy_mois,
+        )
+
+    # Ajuster les largeurs de colonnes pour correspondre à COLS_DETAIL
+    # (les sections agrégées utilisent le même layout que les onglets individuels)
+    for col_idx, w in enumerate([18] + [12] * len(COLS_DETAIL), start=1):
+        ws_res.column_dimensions[get_column_letter(col_idx)].width = max(
+            ws_res.column_dimensions[get_column_letter(col_idx)].width or 0, w
+        )
 
     wb.save(out_path)
 
@@ -621,7 +683,7 @@ Exemples :
     Path(args.rapport).parent.mkdir(parents=True, exist_ok=True)
 
     print("=" * 60)
-    print("CALCUL DES MÉTRIQUES — THERMO NILM")
+    print("CALCUL DES MÉTRIQUES - THERMO NILM")
     print("=" * 60)
     print(f"  Dossier CSV  : {args.dossier}")
     print(f"  Rapport Excel: {args.rapport}")
@@ -648,12 +710,12 @@ Exemples :
                 res = evaluer_periode(csv_path, seuil_on=args.seuil_on)
                 afficher_evaluation_periode(res)
                 tous_resultats.append(res)
-                print(f"  ✔ OK — Client {res['dataid']} ({res['periode'].upper()} {res['annee']})")
+                print(f"  ✔ OK - Client {res['dataid']} ({res['periode'].upper()} {res['annee']})")
             except Exception as e:
                 print(f"  ✗ Erreur : {e}")
 
         if not tous_resultats:
-            print("\n⚠️  Aucun résultat valide — rapport non généré.")
+            print("\n⚠️  Aucun résultat valide - rapport non généré.")
             return
 
         sauvegarder_excel_tous_clients(tous_resultats, args.rapport)
@@ -684,7 +746,7 @@ Exemples :
             print(f"ERREUR : {e}")
 
     if not resultats:
-        print("\n⚠️  Aucun résultat valide — rapport non généré.")
+        print("\n⚠️  Aucun résultat valide - rapport non généré.")
         return
 
     # ── Affichage du tableau récapitulatif ────────────────────────────
