@@ -16,7 +16,7 @@ from data_loader import (
 
 # "region"       → données régionales (processed_energy_data_*.csv)
 # "desagregation" → résultats de désagrégation (resultats_desagregation_*.csv)
-MODE = "desagregation"
+MODE = "region"
 
 # En mode "desagregation" : liste de fichiers à analyser (dans data/).
 # Laisser vide [] pour charger tous les fichiers de désagrégation disponibles.
@@ -78,25 +78,14 @@ def graphiques_region(df: pd.DataFrame, label: str, out_dir: Path) -> None:
     P_on    = P[P > SEUIL_ON]
     couleur = get_couleur(label)
 
-    # G1 - Histogramme
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.hist(P_on, bins=40, color=couleur, edgecolor="white", alpha=0.85)
-    ax.axvline(P.mean(),   color="red",    ls="--", lw=1.8,
-               label=f"Moyenne = {P.mean():.3f} kW")
-    ax.axvline(P.median(), color="orange", ls="--", lw=1.8,
-               label=f"Médiane = {P.median():.3f} kW")
-    ax.set_xlabel("Puissance (kW)")
-    ax.set_ylabel("Fréquence")
-    ax.set_title(f"Distribution des puissances - États ON uniquement ({label})")
-    ax.legend()
-    plt.tight_layout()
-    _save(fig, out_dir, "G1_histogramme.png")
-
-    # G2 - Fréquences par intervalles
+    # G2 - Fréquences par intervalles (été uniquement)
     df = df.copy()
-    df["intervalle"] = pd.cut(P, bins=BINS_PUISSANCE,
-                               labels=LABELS_BINS, right=True)
-    freq_rel = (df["intervalle"].value_counts(normalize=True)
+    df_ete = df[df["saison"] == "Été"]
+    P_ete  = df_ete["clim"]
+    df_ete = df_ete.copy()
+    df_ete["intervalle"] = pd.cut(P_ete, bins=BINS_PUISSANCE,
+                                   labels=LABELS_BINS, right=True)
+    freq_rel = (df_ete["intervalle"].value_counts(normalize=True)
                 .sort_index() * 100)
 
     fig, ax = plt.subplots(figsize=(10, 4))
@@ -108,19 +97,9 @@ def graphiques_region(df: pd.DataFrame, label: str, out_dir: Path) -> None:
                 f"{val:.1f}%", ha="center", va="bottom", fontsize=9)
     ax.set_xlabel("Intervalle de puissance (kW)")
     ax.set_ylabel("Fréquence relative (%)")
-    ax.set_title(f"Distribution des fréquences par intervalles ({label})")
+    ax.set_title(f"Distribution des fréquences par intervalles - Été ({label})")
     plt.tight_layout()
-    _save(fig, out_dir, "G2_freq_intervalles.png")
-
-    # G3 - Boxplot par saison
-    fig, ax = plt.subplots(figsize=(10, 5))
-    sns.boxplot(data=df, x="saison", y="clim",
-                order=ORDRE_SAISONS, palette=PALETTE_SAISONS, ax=ax)
-    ax.set_xlabel("Saison")
-    ax.set_ylabel("Puissance climatisation (kW)")
-    ax.set_title(f"Distribution par saison ({label})")
-    plt.tight_layout()
-    _save(fig, out_dir, "G3_boxplot_saison.png")
+    _save(fig, out_dir, "G2_freq_intervalles_ete.png")
 
     # G4 - Profil horaire moyen
     profil = df.groupby("hour")["clim"].agg(["mean", "std"])
@@ -255,7 +234,7 @@ def main() -> None:
 
         out_csv = BASE_DIR / "output" / "stats" / "stats_comparatif.csv"
         out_csv.parent.mkdir(parents=True, exist_ok=True)
-        comparatif.to_csv(out_csv)
+        comparatif.to_csv(out_csv, encoding="utf-8-sig")
         print(f"\n  Tableau sauvegardé : {out_csv.name}")
 
     if len(all_dfs) > 1:

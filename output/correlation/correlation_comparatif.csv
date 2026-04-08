@@ -1,2 +1,4 @@
 ,region,seuil_thermique,Pearson,Spearman,Gradient (kW/°C),Intercept (kW),N points corrélation
-Désagrégation,Désagrégation,"(19.0, 20.0]",0.2401,0.2211,0.071737,-1.048236,4290
+Austin,Austin,"(20.0, 21.0]",0.1884,0.1886,0.043259,0.351548,249456
+California,California,"(20.0, 21.0]",0.1006,0.0903,0.025188,0.557583,42295
+New York,New York,"(4.999, 6.0]",0.2342,0.2632,0.055896,-0.713282,24421

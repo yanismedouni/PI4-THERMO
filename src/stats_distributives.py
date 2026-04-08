@@ -17,7 +17,7 @@ from data_loader import (
 
 # "region"        → données régionales (processed_energy_data_*.csv)
 # "desagregation" → résultats de désagrégation (resultats_desagregation_*.csv)
-MODE = "desagregation"
+MODE = "region"
 
 # En mode "desagregation" : liste de fichiers à analyser (dans data/).
 # Laisser vide [] pour charger tous les fichiers de désagrégation disponibles.

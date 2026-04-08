@@ -1,7 +1,7 @@
-,Désagrégation
-Skewness,3.7363
-Kurtosis,13.187
-Jarque-Bera stat,295901.6245
-Jarque-Bera p-val,0.0
-N points,30912
-Normale ?,Non
+,Austin,California,New York
+Skewness,1.9435,4.7658,6.2734
+Kurtosis,2.7736,23.6559,47.2884
+Jarque-Bera stat,829691.9793,21831477.2363,44042359.4464
+Jarque-Bera p-val,0.0,0.0,0.0
+N points,873286,805524,441599
+Normale ?,Non,Non,Non

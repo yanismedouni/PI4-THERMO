@@ -50,9 +50,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Fichiers de données par région
 REGIONS = {
-    "Austin"    : "processed_energy_data_austin.csv",
-    "California": "processed_energy_data_california.csv",
-    "New York"  : "processed_energy_data_newyork.csv",
+    "Austin"    : "austin_processed_energy_data.csv",
+    "California": "california_processed_energy_data.csv",
+    "New York"  : "newyork_processed_energy_data.csv",
 }
 
 DATAID      = None   # None = tous les clients, int = un seul client
@@ -97,24 +97,55 @@ def get_couleur(label: str) -> str:
 def charger_region(nom_region: str, nom_fichier: str) -> pd.DataFrame:
     """
     Charge un fichier de données régionales.
-    Colonnes attendues : dataid, year, month, day, hour, minute,
-                         temp, grid, clim, chauffage
+    Supporte deux formats :
+      - Colonnes agrégées : clim, chauffage
+      - Colonnes éclatées : air1/air2/air3 → clim,
+                            furnace1/furnace2/heater1/heater2/heater3 → chauffage
     """
     csv_path = BASE_DIR / "data" / nom_fichier
     if not csv_path.exists():
         print(f"    Fichier introuvable : {csv_path} - région ignorée.")
         return pd.DataFrame()
 
-    cols = ["dataid", "year", "month", "day", "hour", "minute",
-            "temp", "grid", "clim", "chauffage"]
+    # Colonnes de base obligatoires
+    # "temperature" dans les nouveaux fichiers, "temp" dans les anciens
+    en_tete_tmp = pd.read_csv(csv_path, nrows=0, engine="python").columns.tolist()
+    col_temp    = "temperature" if "temperature" in en_tete_tmp else "temp"
+    cols_base   = ["dataid", "year", "month", "day", "hour", "minute", col_temp, "grid"]
 
-    df = load_results_csv(str(csv_path), usecols=cols)
+    # Colonnes des sous-appareils (format éclaté)
+    cols_clim     = ["air1", "air2", "air3"]
+    cols_chauffage = ["furnace1", "furnace2", "heater1", "heater2", "heater3"]
+
+    # Déterminer les colonnes disponibles (réutilise en_tete_tmp déjà lu)
+    en_tete = en_tete_tmp
+
+    format_eclate = any(c in en_tete for c in cols_clim)
+    cols_charger  = cols_base.copy()
+    if format_eclate:
+        cols_charger += [c for c in cols_clim + cols_chauffage if c in en_tete]
+    else:
+        cols_charger += ["clim", "chauffage"]
+
+    df = load_results_csv(str(csv_path), usecols=cols_charger)
 
     try:
-        _require_cols(df, cols)
+        _require_cols(df, cols_base)
     except ValueError as e:
         print(f"    {nom_region} : {e} - région ignorée.")
         return pd.DataFrame()
+
+    # Construire clim et chauffage selon le format
+    if format_eclate:
+        cols_clim_pres     = [c for c in cols_clim     if c in df.columns]
+        cols_chauffage_pres = [c for c in cols_chauffage if c in df.columns]
+        for c in cols_clim_pres + cols_chauffage_pres:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+        df["clim"]      = df[cols_clim_pres].sum(axis=1)     if cols_clim_pres     else 0.0
+        df["chauffage"] = df[cols_chauffage_pres].sum(axis=1) if cols_chauffage_pres else 0.0
+    else:
+        df["clim"]      = pd.to_numeric(df["clim"],      errors="coerce").fillna(0)
+        df["chauffage"] = pd.to_numeric(df["chauffage"], errors="coerce").fillna(0)
 
     df["datetime"] = pd.to_datetime({
         "year": df["year"], "month": df["month"], "day": df["day"],
@@ -126,16 +157,18 @@ def charger_region(nom_region: str, nom_fichier: str) -> pd.DataFrame:
         print(f"   {nom_region} : {n_nat} horodatages invalides → exclus")
         df = df.dropna(subset=["datetime"])
 
-    for col in ["grid", "clim", "chauffage", "temp"]:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df["clim"]      = df["clim"].fillna(0)
-    df["chauffage"] = df["chauffage"].fillna(0)
+    if col_temp != "temp":
+        df = df.rename(columns={col_temp: "temp"})
+    df["grid"] = pd.to_numeric(df["grid"], errors="coerce")
+    df["temp"] = pd.to_numeric(df["temp"], errors="coerce")
     df = df.dropna(subset=["grid"])
 
     if DATAID is not None:
         df = df[df["dataid"] == DATAID]
 
-    df = df.set_index("datetime").sort_index()
+    # set_index après avoir éliminé tous les NaT pour éviter le RuntimeWarning
+    df = df.set_index("datetime")
+    df = df[df.index.notna()].sort_index()
     df["saison"] = df["month"].map(MAP_SAISON)
     df["region"] = nom_region
     df["date"]   = df.index.normalize()
@@ -182,7 +215,7 @@ def charger_desagregation(csv_path: str | Path) -> pd.DataFrame:
         print(f"    {csv_path.name} : {e} - fichier ignoré.")
         return pd.DataFrame()
 
-    df["datetime"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    df["datetime"] = pd.to_datetime(df["timestamp"], format="mixed", errors="coerce")
     n_nat = df["datetime"].isna().sum()
     if n_nat > 0:
         print(f"   {csv_path.name} : {n_nat} horodatages invalides → exclus")
@@ -265,7 +298,19 @@ def charger_sources(
             return {}
 
         combined = pd.concat(fragments).sort_index()
+
+        # Re-extraire les colonnes temporelles depuis l'index après le concat
+        # (l'index peut perdre son type DatetimeIndex selon la version pandas)
+        combined.index = pd.to_datetime(combined.index)
+        combined["year"]   = combined.index.year
+        combined["month"]  = combined.index.month
+        combined["day"]    = combined.index.day
+        combined["hour"]   = combined.index.hour
+        combined["minute"] = combined.index.minute
+        combined["saison"] = combined["month"].map(MAP_SAISON)
+        combined["date"]   = combined.index.normalize()
         combined["region"] = "Désagrégation"
+
         n_clients = combined["dataid"].nunique()
         print(f"\n  {n_clients} clients combinés — {len(combined):,} observations au total")
         return {"Désagrégation": combined}
